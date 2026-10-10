@@ -1,6 +1,10 @@
-use crate::mode::Mode;
-use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
 use jiff::Span;
+
+use crate::{
+    AssertThat,
+    mode::Mode,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 sign_expectations!(Span, zero: Span::new());
 
@@ -54,8 +58,9 @@ impl<M: Mode, R> SpanAssertions<R> for AssertThat<'_, Span, M, R> {
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use jiff::{Span, ToSpan};
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -66,9 +71,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
         use jiff::Span;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -89,9 +97,10 @@ mod tests {
     }
 
     mod is_zero {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::{Span, ToSpan};
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -124,8 +133,9 @@ mod tests {
     }
 
     mod is_negative {
-        use crate::prelude::*;
         use jiff::ToSpan;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -146,9 +156,10 @@ mod tests {
     }
 
     mod is_positive {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::ToSpan;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

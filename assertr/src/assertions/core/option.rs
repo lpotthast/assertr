@@ -1,12 +1,10 @@
 use crate::{
     AssertThat, Mode,
     assertions::support::{explain_variant, project_checked},
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Checks for `Some` and returns a borrowed value on success.
@@ -222,8 +220,9 @@ mod tests {
     }
 
     mod is_some {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -343,8 +342,9 @@ mod tests {
     }
 
     mod is_none {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {

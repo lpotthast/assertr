@@ -182,8 +182,9 @@ impl core::error::Error for AssertionFailures {}
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use core::error::Error;
+
+    use crate::prelude::*;
 
     #[test]
     fn aggregate_reports_join_the_single_reports() {

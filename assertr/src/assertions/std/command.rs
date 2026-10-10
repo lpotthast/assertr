@@ -1,11 +1,13 @@
-use crate::failure::FailureKind;
-use crate::mode::Mode;
-use crate::renderer::RenderingOrder;
-use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::vec::Vec;
-use std::ffi::OsStr;
-use std::process::Command;
+use std::{ffi::OsStr, process::Command};
+
+use crate::{
+    AssertThat,
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    mode::Mode,
+    renderer::{DebugRenderer, RenderingOrder, ValueRenderer},
+};
 
 /// Checks command arguments and retains their observed views on rejection.
 #[derive(Debug, Clone)]
@@ -93,8 +95,9 @@ impl<M: Mode, R> CommandAssertions<R> for AssertThat<'_, Command, M, R> {
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use std::process::Command;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -105,9 +108,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
         use std::process::Command;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -132,9 +138,11 @@ mod tests {
     }
 
     mod has_arg {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::process::Command;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

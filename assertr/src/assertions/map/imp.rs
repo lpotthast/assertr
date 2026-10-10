@@ -1,17 +1,16 @@
 //! Reusable native map expectations and their rejection evidence.
 
-use super::{Map, MapLookup, entry::key_segment};
-use crate::assertions::core::partial_eq::operand_expectation;
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::{Fact, FailureBuilder, FailureKind},
-    renderer::RenderingOrder,
-    renderer::ValueRenderer,
-};
 use alloc::{collections::BTreeSet, vec::Vec};
 use core::{marker::PhantomData, ptr};
+
+use super::{Map, MapLookup, entry::key_segment};
+use crate::{
+    assertions::core::partial_eq::operand_expectation,
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::{RenderingOrder, ValueRenderer},
+};
 
 /// The stored entries the expected keys resolved to, identified by the address of their stored key.
 ///
@@ -688,9 +687,10 @@ where
 #[cfg(test)]
 mod tests {
     mod child_paths {
-        use crate::{failure::PathSegment, prelude::*, test_support::CustomValueRenderer};
         use alloc::collections::BTreeMap;
         use core::fmt;
+
+        use crate::{failure::PathSegment, prelude::*, test_support::CustomValueRenderer};
 
         #[derive(Debug, PartialEq, Eq, PartialOrd, Ord)]
         struct Key {
@@ -807,9 +807,10 @@ mod tests {
     }
 
     mod evidence_budget {
+        use alloc::collections::BTreeMap;
+
         use super::super::ContainsExactlyEntries;
         use crate::{failure::PathSegment, prelude::*};
-        use alloc::collections::BTreeMap;
 
         #[test]
         fn keyed_value_mismatches_respect_the_budget_and_count_omissions() {

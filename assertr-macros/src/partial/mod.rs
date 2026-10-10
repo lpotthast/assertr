@@ -1,6 +1,7 @@
+use std::collections::BTreeSet;
+
 use proc_macro2::{Delimiter, Group, Span, TokenStream, TokenTree};
 use quote::{ToTokens, quote_spanned};
-use std::collections::BTreeSet;
 use syn::{
     Expr, Ident, Path, Token,
     ext::IdentExt,

@@ -17,7 +17,8 @@
 //! | Closures (`std`) | `FnOnceAssertions`, `AsyncFnOnceAssertions` |
 //! | Numbers (`num`) | `NumAssertions` |
 //! | `Path`, `Command`, `Mutex` (`std`) | `PathAssertions`, `CommandAssertions`, `MutexAssertions` |
-//! | Observations, closures returning a future of a changing value (`std`) | `EventualAssertions` |
+//! | Observations, closures returning a future of a changing value (`std`) | `EventualAssertions`, with builders and retry policies in `eventually` |
+//! | Browser elements (`thirtyfour`) | `ThirtyfourWebElementAssertions`, plus shared reads in `thirtyfour::read`; optional `thirtyfour-cdp` descriptions |
 //! | Integrations | `HttpHeaderValueAssertions` (`http`), `SignedDurationAssertions`, `SpanAssertions`, `ZonedAssertions` (`jiff`), `ProgramAssertions` (`program`), `ReqwestResponseAssertions` (`reqwest`), `RootcauseReportAssertions` (`rootcause`), `TokioMutexAssertions`, `TokioRwLockAssertions`, `TokioWatchReceiverAssertions` (`tokio`) |
 //!
 //! Feature-gated traits appear in the list below when their feature is enabled.
@@ -78,64 +79,32 @@ pub(crate) mod rootcause;
 pub(crate) mod set;
 #[cfg(feature = "std")]
 pub(crate) mod std;
+#[cfg(feature = "std")]
+pub use self::std::eventually;
+#[cfg(feature = "thirtyfour")]
+pub mod thirtyfour;
+#[cfg(feature = "thirtyfour")]
+pub use thirtyfour::ThirtyfourWebElementAssertions;
 #[cfg(feature = "tokio")]
 pub(crate) mod tokio;
 
 // Capabilities that make the assertion families available for a type.
-pub use collection::{Collection, RandomAccess, StableOrder};
-pub use distance::NumericDistance;
-pub use has_length::HasLength;
-pub use map::{Map, MapLookup};
-pub use set::SetLookup;
-
-// Values, references, and core types.
-pub use self::core::bool::BoolAssertions;
-pub use self::core::char::CharAssertions;
-pub use self::core::debug::DebugAssertions;
-pub use self::core::display::DisplayAssertions;
-#[cfg(any(feature = "std", test))]
-pub use self::core::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
-pub use self::core::identity::IdentityAssertions;
-pub use self::core::length::LengthAssertions;
-pub use self::core::mem::MemAssertions;
-pub use self::core::option::{OptionAssertions, OptionExtractAssertions};
-pub use self::core::partial_eq::PartialEqAssertions;
-pub use self::core::partial_ord::PartialOrdAssertions;
-pub use self::core::pattern::PatternAssertions;
-pub use self::core::poll::{PollAssertions, PollExtractAssertions};
-pub use self::core::range::{RangeAssertions, RangeBoundAssertions};
-pub use self::core::ref_cell::RefCellAssertions;
-pub use self::core::result::{ResultAssertions, ResultExtractAssertions};
-pub use self::core::string::StrAssertions;
-
-// Iterators, collections, sets, and maps.
-pub use self::core::iter::{
-    ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
-};
-pub use collection::{
-    CollectionAssertions, RandomAccessExtractAssertions, StableOrderAssertions,
-    StableOrderExtractAssertions,
-};
-pub use map::MapAssertions;
-pub use set::SetAssertions;
-
 // Boxed `Any` values and panic payloads.
 pub use alloc::boxed::{BoxAssertions, BoxExtractAssertions};
 
-// Feature integrations.
-#[cfg(feature = "std")]
-pub use self::std::{
-    command::CommandAssertions,
-    eventually::{Consistently, EventualAssertions, Eventually, Fallible, Patience, Plain},
-    mutex::MutexAssertions,
-    path::PathAssertions,
+pub use collection::{
+    Collection, CollectionAssertions, RandomAccess, RandomAccessExtractAssertions, StableOrder,
+    StableOrderAssertions, StableOrderExtractAssertions,
 };
+pub use distance::NumericDistance;
+pub use has_length::HasLength;
 #[cfg(feature = "http")]
 pub use http::header_value::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
 #[cfg(feature = "jiff")]
 pub use jiff::{
     signed_duration::SignedDurationAssertions, span::SpanAssertions, zoned::ZonedAssertions,
 };
+pub use map::{Map, MapAssertions, MapLookup};
 #[cfg(feature = "num")]
 pub use num::NumAssertions;
 #[cfg(feature = "program")]
@@ -147,8 +116,43 @@ pub use rootcause::report::{
     RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
     RootcauseReportAssertions,
 };
+pub use set::{SetAssertions, SetLookup};
 #[cfg(feature = "tokio")]
 pub use tokio::{
     mutex::TokioMutexAssertions, rw_lock::TokioRwLockAssertions,
     watch::TokioWatchReceiverAssertions,
+};
+
+// Values, references, and core types.
+pub use self::core::bool::BoolAssertions;
+#[cfg(any(feature = "std", test))]
+pub use self::core::r#fn::{AsyncFnOnceAssertions, FnOnceAssertions};
+// Iterators, collections, sets, and maps.
+pub use self::core::iter::{
+    ExactSizeIteratorAssertions, IntoIteratorAssertions, IteratorAssertions,
+};
+pub use self::core::{
+    char::CharAssertions,
+    debug::DebugAssertions,
+    display::DisplayAssertions,
+    identity::IdentityAssertions,
+    length::LengthAssertions,
+    mem::MemAssertions,
+    option::{OptionAssertions, OptionExtractAssertions},
+    partial_eq::PartialEqAssertions,
+    partial_ord::PartialOrdAssertions,
+    pattern::PatternAssertions,
+    poll::{PollAssertions, PollExtractAssertions},
+    range::{RangeAssertions, RangeBoundAssertions},
+    ref_cell::RefCellAssertions,
+    result::{ResultAssertions, ResultExtractAssertions},
+    string::StrAssertions,
+};
+// Feature integrations.
+#[cfg(feature = "std")]
+pub use self::std::{
+    command::CommandAssertions,
+    eventually::{EventualAssertions, Patience},
+    mutex::MutexAssertions,
+    path::PathAssertions,
 };

@@ -1,12 +1,15 @@
 //! Assertions for numeric identities, signs, tolerances, and floating-point classifications.
 
-use crate::borrow_for::BorrowFor;
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
 #[cfg(any(feature = "std", feature = "libm"))]
 use num_traits::Float;
 use num_traits::{Num, Signed};
 
 pub use super::distance::{IsCloseTo, NumericDistance};
+use crate::{
+    AssertThat, Mode,
+    borrow_for::BorrowFor,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 property_expectation! {
     /// Checks [`Signed::is_negative`], including the sign bit of floating-point values.
@@ -403,8 +406,9 @@ mod tests {
     fn quick_float_type_check() {
         use core::fmt::Debug;
 
-        use crate::prelude::*;
         use ::num_traits::Float;
+
+        use crate::prelude::*;
 
         fn assert_classification<T: Float + Debug>(nan: T, finite: T, infinite: T) {
             assert_that!(nan).is_nan();
@@ -417,8 +421,9 @@ mod tests {
     }
 
     mod is_zero {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -486,8 +491,9 @@ mod tests {
     }
 
     mod is_negative {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -545,8 +551,9 @@ mod tests {
     mod is_close_to {
         // The NumericDistance tests own the primitive arithmetic and special-value matrices.
         // These tests cover tolerance handling, diagnostics, and integration.
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -660,9 +667,10 @@ mod tests {
 
     #[cfg(any(feature = "std", feature = "libm"))]
     mod is_nan {
-        use crate::prelude::*;
         use ::num_traits::Float;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -693,8 +701,9 @@ mod tests {
 
     #[cfg(any(feature = "std", feature = "libm"))]
     mod is_finite {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -777,9 +786,10 @@ mod tests {
     }
 
     mod borrowed_tolerances {
+        use core::cell::Cell;
+
         use super::super::IsCloseTo;
         use crate::{prelude::*, test_support::BorrowSpy};
-        use core::cell::Cell;
 
         #[test]
         fn expected_and_deviation_can_be_borrowed_independently() {

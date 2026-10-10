@@ -1,13 +1,12 @@
-use crate::{
-    AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::{FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
-};
 use alloc::{format, string::String};
 use core::fmt::Debug;
+
+use crate::{
+    AssertThat, Mode,
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Compares a subject's formatted representation with the expected text. A rejection retains both
 /// texts, so explanation never formats the operands again.
@@ -211,8 +210,9 @@ mod tests {
     }
 
     mod has_debug_string {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -317,9 +317,10 @@ mod tests {
 
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
-            use super::super::HasDebugValue;
-            use crate::{expectation::AssertionContext, expectation::Expectation};
             use core::{cell::Cell, fmt};
+
+            use super::super::HasDebugValue;
+            use crate::expectation::{AssertionContext, Expectation};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);
             impl fmt::Debug for Value<'_> {
@@ -371,8 +372,9 @@ mod tests {
         }
 
         mod with_string {
-            use crate::prelude::*;
             use indoc::formatdoc;
+
+            use crate::prelude::*;
 
             // That's why we also have `has_debug_string`.
             #[test]

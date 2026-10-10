@@ -6,12 +6,10 @@ use crate::{
         PositionReporting::Unavailable, run,
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::Expectation,
-    expectation::lists::SatisfyingList,
+    expectation::{Expectation, lists::SatisfyingList},
     matchers::{MatcherList, satisfying},
     mode::Capture,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Chainable assertions over a fresh borrowed iteration of a collection-like value.
@@ -372,8 +370,9 @@ mod tests {
     }
 
     mod into_iter_contains_all {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -438,8 +437,9 @@ mod tests {
     }
 
     mod into_iter_contains_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -523,8 +523,9 @@ mod tests {
     }
 
     mod into_iter_does_not_contain {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -571,8 +572,9 @@ mod tests {
     }
 
     mod into_iter_does_not_contain_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -649,8 +651,9 @@ mod tests {
     }
 
     mod into_iter_contains_exactly_in_any_order_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -776,8 +779,9 @@ mod tests {
     }
 
     mod into_iter_is_empty {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -816,8 +820,9 @@ mod tests {
     }
 
     mod into_iter_is_not_empty {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -851,8 +856,9 @@ mod tests {
     }
 
     mod into_iter_has_length {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

@@ -1,13 +1,12 @@
-use crate::assertions::distance::NumericDistance;
-use crate::borrow_for::BorrowFor;
-use crate::mode::Mode;
+use jiff::SignedDuration;
+
 use crate::{
     AssertThat,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
-    renderer::{Rendered, RenderingContext},
+    assertions::distance::NumericDistance,
+    borrow_for::BorrowFor,
+    mode::Mode,
+    renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
 };
-use jiff::SignedDuration;
 
 // SignedDuration's alternate Debug form shows raw nanoseconds. Keep its compact form in reports.
 fn compact<R: ValueRenderer<SignedDuration>>(
@@ -123,8 +122,9 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use jiff::SignedDuration;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -138,9 +138,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
         use jiff::SignedDuration;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -162,9 +165,10 @@ mod tests {
     }
 
     mod is_zero {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -199,9 +203,10 @@ mod tests {
     }
 
     mod is_negative {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -235,9 +240,10 @@ mod tests {
     }
 
     mod is_positive {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -271,11 +277,14 @@ mod tests {
     }
 
     mod is_close_to {
-        use crate::failure::FailureKind;
-        use crate::prelude::*;
-        use crate::test_support::{SENTINEL, SentinelRenderer};
         use indoc::formatdoc;
         use jiff::SignedDuration;
+
+        use crate::{
+            failure::FailureKind,
+            prelude::*,
+            test_support::{SENTINEL, SentinelRenderer},
+        };
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -309,12 +318,13 @@ mod tests {
 
         #[test]
         fn resolves_operands_once_in_order_and_reuses_rejected_views() {
-            use super::super::IsCloseTo;
-            use crate::borrow_for::BorrowFor;
             use core::{
                 borrow::Borrow,
                 cell::{Cell, RefCell},
             };
+
+            use super::super::IsCloseTo;
+            use crate::borrow_for::BorrowFor;
             struct Operand<'a> {
                 value: SignedDuration,
                 calls: Cell<usize>,

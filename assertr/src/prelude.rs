@@ -13,6 +13,8 @@ pub(crate) use alloc::{
 
 #[cfg(feature = "num")]
 pub use crate::assertions::NumAssertions;
+#[cfg(feature = "thirtyfour")]
+pub use crate::assertions::ThirtyfourWebElementAssertions;
 #[cfg(any(feature = "std", test))]
 pub use crate::assertions::{AsyncFnOnceAssertions, FnOnceAssertions};
 #[cfg(feature = "std")]
@@ -36,6 +38,8 @@ pub use crate::assertions::{SignedDurationAssertions, SpanAssertions, ZonedAsser
 pub use crate::assertions::{
     TokioMutexAssertions, TokioRwLockAssertions, TokioWatchReceiverAssertions,
 };
+#[cfg(test)]
+pub(crate) use crate::expectation::AssertionContext;
 #[cfg(feature = "partial")]
 pub use crate::partial;
 #[cfg(test)]
@@ -43,14 +47,7 @@ pub(crate) use crate::test_support::FailureReportAssertions;
 #[cfg(test)]
 pub(crate) use crate::test_support::assert_caller_location;
 pub use crate::{
-    AssertThat,
-    failure::{AssertionFailure, AssertionFailures},
-    renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
-};
-#[cfg(feature = "fluent")]
-pub use crate::{IntoAssertContext, IntoOwnedAssertContext};
-pub use crate::{
-    assert_that, assert_that_owned, assert_that_type,
+    AssertThat, assert_that, assert_that_owned, assert_that_type,
     assertions::{
         BoolAssertions, BoxAssertions, BoxExtractAssertions, CharAssertions, CollectionAssertions,
         DebugAssertions, DisplayAssertions, ExactSizeIteratorAssertions, HasLength,
@@ -63,10 +60,11 @@ pub use crate::{
     },
     elements_are, elements_are_in_any_order, entries_are,
     expectation::Expectation,
+    failure::{AssertionFailure, AssertionFailures},
     matchers,
     mode::{Capture, Mode, Panic},
     pattern,
+    renderer::{DebugRenderer, RenderingBudget, ValueRenderer},
 };
-
-#[cfg(test)]
-pub(crate) use crate::expectation::AssertionContext;
+#[cfg(feature = "fluent")]
+pub use crate::{IntoAssertContext, IntoOwnedAssertContext};

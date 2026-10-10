@@ -1,10 +1,8 @@
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// A Rust pattern together with the predicate and source text needed to assert that it matches.
@@ -215,8 +213,9 @@ impl<T, M: Mode, R> PatternAssertions<T, R> for AssertThat<'_, T, M, R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use indoc::formatdoc;
+
+    use crate::prelude::*;
 
     #[derive(Debug)]
     enum TestError {
@@ -239,9 +238,11 @@ mod tests {
     mod matcher {
         use core::cell::Cell;
 
-        use crate::failure::FailureKind;
-        use crate::matchers::{DoesNotMatchPattern, dereferenced, elements_are};
-        use crate::prelude::*;
+        use crate::{
+            failure::FailureKind,
+            matchers::{DoesNotMatchPattern, dereferenced, elements_are},
+            prelude::*,
+        };
 
         #[test]
         fn supports_pattern_guards() {
@@ -303,8 +304,10 @@ mod tests {
     mod renderer_contract {
         use core::fmt;
 
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {

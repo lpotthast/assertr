@@ -17,17 +17,7 @@ mod unordered;
 mod tests;
 
 use alloc::{collections::VecDeque, vec::Vec};
-use core::borrow::Borrow;
-use core::{marker::PhantomData, panic::Location};
-
-use crate::{
-    AssertThat, Mode,
-    assertions::{HasLength, collection::Collection},
-    expectation::AssertionContext,
-    failure::{Fact, FailureBuilder, FailureKind},
-    renderer::ValueRenderer,
-    renderer::{CollectionPresentation, Rendered, RenderingContext, RenderingOrder},
-};
+use core::{borrow::Borrow, marker::PhantomData, panic::Location};
 
 pub(crate) use cardinality::{IsEmpty, IsNotEmpty, LengthScan};
 pub(crate) use membership::{
@@ -35,6 +25,14 @@ pub(crate) use membership::{
 };
 pub(crate) use positional::{ElementsEqual, ElementsMatch};
 pub(crate) use unordered::{ContainsExactlyInAnyOrder, ElementsAreInAnyOrder};
+
+use crate::{
+    AssertThat, Mode,
+    assertions::{HasLength, collection::Collection},
+    expectation::AssertionContext,
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::{CollectionPresentation, Rendered, RenderingContext, RenderingOrder, ValueRenderer},
+};
 
 const PREVIEW_CAPACITY: usize = 16;
 

@@ -1,14 +1,10 @@
 //! Reusable collection element matcher expectations.
 
 use super::Collection;
-use crate::expectation::composite_items;
 use crate::{
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{FailureBuilder, FailureKind},
-    renderer::RenderingOrder,
-    renderer::ValueRenderer,
+    renderer::{RenderingOrder, ValueRenderer},
 };
 
 /// Relations describing a search for one matching item, such as a collection element or map value.
@@ -246,6 +242,8 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, 
 #[cfg(test)]
 mod tests {
     mod contains_matching {
+        use core::{cell::Cell, fmt};
+
         use crate::{
             assertions::{collection::contains_matching, core::partial_eq::eq},
             expectation::test_support::{assert_bounded_order, bounded_failures},
@@ -253,7 +251,6 @@ mod tests {
             prelude::*,
             test_support::UnorderedSet,
         };
-        use core::{cell::Cell, fmt};
 
         struct ReverseRenderer<'a>(&'a Cell<usize>);
 

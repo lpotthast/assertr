@@ -6,8 +6,7 @@
 //! actual value be paired with exactly one expectation, and which ones are left over when it
 //! cannot? This module answers it once, for any relation given as a predicate over index pairs.
 
-use alloc::vec;
-use alloc::vec::Vec;
+use alloc::{vec, vec::Vec};
 
 pub(crate) struct BipartiteMatchResult {
     pub(crate) matched_pairs: Vec<(usize, usize)>,
@@ -241,11 +240,12 @@ where
 #[cfg(test)]
 mod tests {
     mod matches_exactly {
+        use alloc::vec::Vec;
+
         use crate::{
             prelude::*,
             util::matching::{match_bipartite, matches_exactly},
         };
-        use alloc::vec::Vec;
 
         #[test]
         fn agrees_with_detailed_assignment_for_every_small_relation() {
@@ -279,8 +279,9 @@ mod tests {
     }
 
     mod matches_exactly_early_exit {
-        use crate::{prelude::*, util::matching::matches_exactly};
         use alloc::vec::Vec;
+
+        use crate::{prelude::*, util::matching::matches_exactly};
 
         #[test]
         fn stops_at_the_first_unassignable_actual_value() {
@@ -296,9 +297,9 @@ mod tests {
     }
 
     mod match_bipartite {
-        use crate::prelude::*;
-        use crate::util::matching::match_bipartite;
         use alloc::vec::Vec;
+
+        use crate::{prelude::*, util::matching::match_bipartite};
 
         #[test]
         fn returns_equal_on_matching_input() {

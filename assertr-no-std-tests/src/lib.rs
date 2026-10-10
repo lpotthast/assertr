@@ -9,16 +9,20 @@ extern crate alloc;
 
 use alloc::{boxed::Box, string::String};
 
-use assertr::matchers::{entry_matchers, predicate};
-use assertr::prelude::*;
+use assertr::{
+    matchers::{entry_matchers, predicate},
+    prelude::*,
+};
 
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn memory_assertions_compile_without_std() {
     use alloc::string::String;
-    use assertr::assertions::MemAssertions;
-    use assertr::matchers::memory::NeedsDrop;
-    use assertr::prelude::MemAssertions as PreludeMemAssertions;
+
+    use assertr::{
+        assertions::MemAssertions, matchers::memory::NeedsDrop,
+        prelude::MemAssertions as PreludeMemAssertions,
+    };
 
     struct NoRenderer;
     fn check<A: MemAssertions>(assertion: A) -> A {
@@ -238,6 +242,7 @@ fn callback_assertions_compile_without_subject_renderers() {
 #[allow(dead_code)]
 fn set_and_map_assertions_compile_without_std() {
     use alloc::collections::{BTreeMap, BTreeSet};
+
     use assertr::{expectation::Expectation, matchers::ContainsMatching};
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
@@ -304,12 +309,15 @@ extern crate std;
 
 #[cfg(all(test, not(feature = "std")))]
 mod tests {
-    use crate::NumericRenderer;
     use assertr::{assert_that, prelude::StrAssertions};
 
+    use crate::NumericRenderer;
+
     mod matchers {
-        use assertr::matchers::{eq, ge};
-        use assertr::prelude::*;
+        use assertr::{
+            matchers::{eq, ge},
+            prelude::*,
+        };
 
         #[cfg(feature = "partial")]
         #[test]
@@ -331,10 +339,12 @@ mod tests {
     };
     use core::sync::atomic::{AtomicUsize, Ordering};
 
-    use assertr::failure::AssertionFailure;
-    use assertr::prelude::{
-        CollectionAssertions, IdentityAssertions, LengthAssertions, PartialEqAssertions,
-        StableOrderAssertions,
+    use assertr::{
+        failure::AssertionFailure,
+        prelude::{
+            CollectionAssertions, IdentityAssertions, LengthAssertions, PartialEqAssertions,
+            StableOrderAssertions,
+        },
     };
 
     fn counting(
@@ -493,10 +503,8 @@ impl ValueRenderer<usize> for NumericRenderer {
 #[cfg_attr(test, test)]
 fn typed_rejections_and_numeric_evidence_compile_without_std() {
     use assertr::{
-        expectation::AssertionContext,
-        expectation::Expectation,
-        failure::Fact,
-        failure::{FailureBuilder, FailureKind},
+        expectation::{AssertionContext, Expectation},
+        failure::{Fact, FailureBuilder, FailureKind},
         matchers::each,
     };
 
@@ -591,11 +599,14 @@ fn reusable_checks_compile_without_std() {
 #[cfg_attr(test, test)]
 fn assertion_definitions_compile_without_std() {
     use alloc::string::String;
-    use assertr::expectation::Expectation;
-    use assertr::matchers::{
-        EqualTo, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
-        cell::{IsBorrowed, IsNotMutablyBorrowed},
-        string::StartsWith,
+
+    use assertr::{
+        expectation::Expectation,
+        matchers::{
+            EqualTo, GreaterOrEqual, HasDebugString, IsOfType, IsOk, IsReady, IsSome,
+            cell::{IsBorrowed, IsNotMutablyBorrowed},
+            string::StartsWith,
+        },
     };
     with_context(DebugRenderer, |context| {
         // One definition per leaf capability.
@@ -635,8 +646,10 @@ fn assertion_definitions_compile_without_std() {
 #[allow(dead_code)]
 #[cfg_attr(test, test)]
 fn collection_assertion_definitions_compile_without_std() {
-    use assertr::expectation::Expectation;
-    use assertr::matchers::{HasLengthOf, collection, iterator, map, set};
+    use assertr::{
+        expectation::Expectation,
+        matchers::{HasLengthOf, collection, iterator, map, set},
+    };
 
     with_context(DebugRenderer, |context| {
         let values = [1, 2];
@@ -726,13 +739,13 @@ fn with_context<R, F: Fn(&assertr::expectation::AssertionContext<'_, R>)>(render
 #[allow(dead_code)]
 mod structural_rendering {
     use alloc::collections::{BTreeMap, BTreeSet};
+    use core::{cell::RefCell, fmt};
+
     use assertr::{
-        failure::Fact,
-        failure::FailureKind,
+        failure::{Fact, FailureKind},
         prelude::*,
         renderer::{Rendered, RenderingContext, RenderingOrder},
     };
-    use core::{cell::RefCell, fmt};
 
     #[derive(Eq, PartialEq, Ord, PartialOrd)]
     struct Token(u8);
@@ -823,6 +836,7 @@ fn reusable_bulk_views_compile_without_std() {
 #[cfg_attr(test, test)]
 fn borrowed_views_compile_without_std() {
     use alloc::{collections::BTreeMap, string::String, vec};
+
     use assertr::matchers::{
         EqualTo, all_of, dereferenced, each,
         range::{ContainsElement, DoesNotContainElement},

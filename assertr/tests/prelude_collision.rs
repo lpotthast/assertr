@@ -5,9 +5,12 @@ use assertr::prelude::*;
 
 #[test]
 fn a_custom_collection_can_compare_borrowed_instances_without_a_renderer() {
-    use assertr::assertions::{Collection as AssertrCollection, StableOrder};
-    use assertr::renderer::CollectionPresentation;
     use core::borrow::Borrow;
+
+    use assertr::{
+        assertions::{Collection as AssertrCollection, StableOrder},
+        renderer::CollectionPresentation,
+    };
 
     struct Key {
         _byte: u8,
@@ -104,9 +107,10 @@ fn the_collection_assertions_work_without_the_collection_trait_in_scope() {
 
 #[test]
 fn a_custom_collection_gets_every_collection_assertion() {
-    use assertr::assertions::HasLength;
-    use assertr::assertions::{Collection as AssertrCollection, RandomAccess, StableOrder};
-    use assertr::renderer::CollectionPresentation;
+    use assertr::{
+        assertions::{Collection as AssertrCollection, HasLength, RandomAccess, StableOrder},
+        renderer::CollectionPresentation,
+    };
 
     /// A downstream collection type, implementing only the extension traits.
     #[derive(Debug)]
@@ -174,9 +178,10 @@ fn a_custom_collection_gets_every_collection_assertion() {
 
 #[test]
 fn a_custom_bag_gets_only_order_free_collection_assertions() {
-    use assertr::assertions::Collection as AssertrCollection;
-    use assertr::assertions::HasLength;
-    use assertr::renderer::{CollectionPresentation, RenderingOrder};
+    use assertr::{
+        assertions::{Collection as AssertrCollection, HasLength},
+        renderer::{CollectionPresentation, RenderingOrder},
+    };
 
     #[derive(Debug)]
     struct Multiset(Vec<i32>);
@@ -233,10 +238,10 @@ fn bare_set_and_map_names_stay_usable_next_to_a_second_glob_imported_prelude() {
 
 #[test]
 fn a_custom_set_gets_every_set_and_collection_assertion() {
-    use assertr::assertions::Collection as AssertrCollection;
-    use assertr::assertions::HasLength;
-    use assertr::assertions::SetLookup;
-    use assertr::renderer::CollectionPresentation;
+    use assertr::{
+        assertions::{Collection as AssertrCollection, HasLength, SetLookup},
+        renderer::CollectionPresentation,
+    };
 
     /// A downstream set type, implementing only the extension traits.
     #[derive(Debug)]
@@ -314,9 +319,10 @@ fn a_custom_map_gets_every_map_assertion() {
     use core::borrow::Borrow;
     use std::collections::BTreeMap;
 
-    use assertr::assertions::HasLength;
-    use assertr::assertions::{Map as AssertrMap, MapLookup as AssertrMapLookup};
-    use assertr::renderer::RenderingOrder;
+    use assertr::{
+        assertions::{HasLength, Map as AssertrMap, MapLookup as AssertrMapLookup},
+        renderer::RenderingOrder,
+    };
 
     /// A downstream map type, implementing only the extension traits.
     #[derive(Debug)]

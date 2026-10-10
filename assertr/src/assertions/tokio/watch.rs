@@ -1,7 +1,9 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::failure::FailureKind;
-use crate::prelude::*;
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
+use crate::{
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    prelude::*,
+};
 
 /// Compares the current watch value without marking it seen.
 #[derive(Debug, Clone)]
@@ -194,8 +196,9 @@ mod tests {
     }
 
     mod observations {
-        use crate::prelude::*;
         use core::{borrow::Borrow, cell::Cell};
+
+        use crate::prelude::*;
 
         struct Expected<'a>(&'a Cell<usize>);
         impl borrow_for::BorrowFor<i32> for Expected<'_> {
@@ -222,8 +225,10 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -268,9 +273,10 @@ mod tests {
     }
 
     mod has_current_value {
+        use indoc::formatdoc;
+
         use super::Person;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -325,12 +331,13 @@ mod tests {
         }
 
         mod string_views {
+            use core::cell::Cell;
+
             use crate::{
                 assertions::tokio::watch::HasCurrentValue,
                 prelude::*,
                 test_support::{StrOperand, StringRenderer},
             };
-            use core::cell::Cell;
 
             #[test]
             fn literal_and_custom_views_preserve_the_watch_observation() {
@@ -360,9 +367,10 @@ mod tests {
     }
 
     mod change_state {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::watch::{self, Receiver};
+
+        use crate::prelude::*;
 
         /// Applies `check` twice in capture mode to a receiver with the given seen and closed
         /// state. Returns the rejection relations after asserting that the receiver's

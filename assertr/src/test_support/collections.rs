@@ -1,10 +1,11 @@
 //! Capability fixtures available with or without the library's `std` feature.
 
+use alloc::vec::Vec;
+
 use crate::{
     assertions::{HasLength, collection::Collection, map::Map, set::SetLookup},
     renderer::{CollectionPresentation, RenderingOrder},
 };
-use alloc::vec::Vec;
 
 /// A set without a deterministic iteration order, like a `HashSet`, that is available in every
 /// feature configuration.

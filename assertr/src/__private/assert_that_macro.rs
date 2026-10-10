@@ -5,9 +5,7 @@
 
 use core::ops::Deref;
 
-use crate::AssertThat;
-use crate::actual::Actual;
-use crate::mode::Panic;
+use crate::{AssertThat, actual::Actual, mode::Panic};
 
 /// Fallback wrapper for the general borrowed path.
 ///

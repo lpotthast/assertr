@@ -191,12 +191,12 @@ impl FailureBuilder {
 #[cfg(test)]
 mod tests {
     use core::{cell::Cell, fmt};
+
     use indoc::formatdoc;
 
     use super::FailureBuilder;
     use crate::{
-        failure::Fact,
-        failure::FailureKind,
+        failure::{Fact, FailureKind},
         prelude::*,
         renderer::{RenderedBody, RenderingContext},
     };

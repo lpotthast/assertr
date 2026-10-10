@@ -3,9 +3,7 @@
 use super::{EntryRejection, Map, MapLookup};
 use crate::{
     assertions::collection::matching::MatchingItem,
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation},
     failure::{FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };

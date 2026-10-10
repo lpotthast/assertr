@@ -1,13 +1,13 @@
 //! Reusable set relations and their rejection evidence.
 
+use alloc::vec::Vec;
+
 use super::SetLookup;
 use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
-use alloc::vec::Vec;
 
 /// One set relation: which elements to inspect, which membership rejects them, and how to
 /// describe the relation and its offending elements.

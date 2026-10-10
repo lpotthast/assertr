@@ -1,17 +1,16 @@
 //! Reusable value expectations for finite collections.
 
-use super::{Collection, Placement, StableOrder};
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
-    renderer::ValueRenderer,
-    renderer::{RenderingContext, RenderingOrder},
-    util::matching::{assign_exactly, match_bipartite},
-};
 use alloc::vec::Vec;
 use core::marker::PhantomData;
+
+use super::{Collection, Placement, StableOrder};
+use crate::{
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
+    renderer::{RenderingContext, RenderingOrder, ValueRenderer},
+    util::matching::{assign_exactly, match_bipartite},
+};
 
 /// Retained missing values from a membership rejection.
 #[derive(Debug)]
@@ -828,11 +827,12 @@ where
 #[cfg(test)]
 mod tests {
     mod evidence_budget {
+        use core::{cell::Cell, fmt};
+
         use crate::{
             failure::{FailureKind, PathSegment},
             prelude::*,
         };
-        use core::{cell::Cell, fmt};
 
         struct Compared<'a> {
             value: i32,
@@ -961,8 +961,9 @@ mod tests {
     }
 
     mod ends_with {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn a_shorter_subject_whose_elements_end_the_suffix_reports_only_its_length() {
@@ -1057,9 +1058,10 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order {
+        use core::cell::Cell;
+
         use super::super::ContainsExactlyInAnyOrder;
         use crate::{expectation::AssertionContext, prelude::*};
-        use core::cell::Cell;
 
         #[derive(Debug)]
         struct Counted<'a> {
@@ -1101,9 +1103,10 @@ mod tests {
     }
 
     mod contains_exactly {
+        use core::cell::Cell;
+
         use super::super::ContainsExactly;
         use crate::{expectation::AssertionContext, prelude::*};
-        use core::cell::Cell;
 
         #[derive(Debug)]
         struct Counted<'a> {
@@ -1150,9 +1153,10 @@ mod tests {
     }
 
     mod borrowed_operands {
+        use core::cell::Cell;
+
         use super::super::*;
         use crate::{prelude::*, test_support::BorrowSpy};
-        use core::cell::Cell;
 
         #[test]
         #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed temporaries are the contract under test.
@@ -1287,9 +1291,10 @@ mod tests {
     }
 
     mod repeatable_expected_data {
+        use core::{borrow::Borrow, cell::Cell};
+
         use super::super::*;
         use crate::{prelude::*, test_support::BorrowSpy};
-        use core::{borrow::Borrow, cell::Cell};
 
         #[test]
         fn borrowed_wrapper_lists_reuse_the_stored_operand_selection_across_subjects() {

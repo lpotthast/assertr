@@ -9,12 +9,10 @@ use crate::{
         },
     },
     borrow_for::{BorrowFor, borrow_for},
-    expectation::Expectation,
-    expectation::lists::SatisfyingList,
+    expectation::{Expectation, lists::SatisfyingList},
     matchers::{MatcherList, satisfying},
     mode::Capture,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Terminal assertions for an owned iterator.
@@ -692,8 +690,9 @@ mod tests {
     }
 
     mod contains {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -746,8 +745,9 @@ mod tests {
     }
 
     mod contains_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -838,8 +838,9 @@ mod tests {
     }
 
     mod does_not_contain {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -890,8 +891,9 @@ mod tests {
     }
 
     mod does_not_contain_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -965,8 +967,9 @@ mod tests {
     }
 
     mod starts_with_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1035,8 +1038,9 @@ mod tests {
     }
 
     mod ends_with {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1087,8 +1091,9 @@ mod tests {
     }
 
     mod ends_with_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1157,8 +1162,9 @@ mod tests {
     }
 
     mod contains_contiguous {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1208,8 +1214,9 @@ mod tests {
     }
 
     mod contains_contiguous_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1310,8 +1317,9 @@ mod tests {
     }
 
     mod contains_exactly {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1361,8 +1369,9 @@ mod tests {
     }
 
     mod contains_exactly_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1462,9 +1471,9 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order {
-        use crate::prelude::*;
-
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1554,8 +1563,9 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         /// An item without `PartialEq`, matched by predicates over its field.
         #[derive(Debug)]

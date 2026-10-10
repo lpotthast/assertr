@@ -1,7 +1,11 @@
 //! Assertions about reports and compile-time trait availability.
 
-use crate::{AssertThat, Mode, failure::AssertionFailure, failure::FailureKind};
 use alloc::string::ToString;
+
+use crate::{
+    AssertThat, Mode,
+    failure::{AssertionFailure, FailureKind},
+};
 
 pub(crate) trait FailureReportAssertions {
     fn has_text_report(self, expected: impl AsRef<str>) -> Self;

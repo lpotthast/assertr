@@ -1,10 +1,18 @@
-use crate::failure::FailureKind;
-use crate::{AssertThat, Mode, mode::Panic, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::{format, string::String};
-use core::any::{TypeId, type_name};
-use core::fmt::Display;
+use core::{
+    any::{TypeId, type_name},
+    fmt::Display,
+};
+
 use rootcause::markers::Dynamic;
+
+use crate::{
+    AssertThat, Mode,
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    mode::Panic,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Compares the observed direct child count.
 #[derive(Debug, Clone, Copy)]
@@ -535,9 +543,10 @@ fn explain_context_type<E>(
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use indoc::formatdoc;
     use rootcause::prelude::*;
+
+    use crate::prelude::*;
 
     #[derive(Debug)]
     struct TestError(&'static str);
@@ -552,9 +561,10 @@ mod tests {
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
+        use rootcause::prelude::*;
+
         use super::TestError;
         use crate::prelude::*;
-        use rootcause::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -578,15 +588,17 @@ mod tests {
     }
 
     mod renderer_contract {
-        use super::TestError;
-        use crate::prelude::*;
-        use crate::test_support::{
-            CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
-            assert_redacted,
-        };
         use indoc::formatdoc;
-        use rootcause::markers::Dynamic;
-        use rootcause::prelude::*;
+        use rootcause::{markers::Dynamic, prelude::*};
+
+        use super::TestError;
+        use crate::{
+            prelude::*,
+            test_support::{
+                CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
+                assert_redacted,
+            },
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -645,11 +657,14 @@ mod tests {
 
     #[test]
     fn report_collections_and_attachments_have_lengths() {
+        use rootcause::{
+            markers::{Dynamic, SendSync},
+            report_attachment::ReportAttachment,
+            report_attachments::ReportAttachments,
+            report_collection::ReportCollection,
+        };
+
         use crate::assertions::HasLength;
-        use rootcause::markers::{Dynamic, SendSync};
-        use rootcause::report_attachment::ReportAttachment;
-        use rootcause::report_attachments::ReportAttachments;
-        use rootcause::report_collection::ReportCollection;
 
         let mut collection: ReportCollection<Dynamic, SendSync> = ReportCollection::new();
         assert_that!(&collection).has_length(0).is_empty();
@@ -676,9 +691,10 @@ mod tests {
     }
 
     mod has_child_count {
+        use rootcause::prelude::*;
+
         use super::TestError;
         use crate::prelude::*;
-        use rootcause::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -699,9 +715,10 @@ mod tests {
     }
 
     mod has_attachment_count {
+        use rootcause::prelude::*;
+
         use super::TestError;
         use crate::prelude::*;
-        use rootcause::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -719,10 +736,11 @@ mod tests {
     }
 
     mod has_current_context_type {
-        use super::TestError;
-        use crate::prelude::*;
         use indoc::formatdoc;
         use rootcause::prelude::*;
+
+        use super::TestError;
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -763,10 +781,11 @@ mod tests {
     }
 
     mod has_current_context_display_value {
-        use super::TestError;
-        use crate::prelude::*;
         use indoc::formatdoc;
         use rootcause::prelude::*;
+
+        use super::TestError;
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -810,10 +829,11 @@ mod tests {
     }
 
     mod has_current_context_debug_string {
-        use super::TestError;
-        use crate::prelude::*;
         use indoc::formatdoc;
         use rootcause::prelude::*;
+
+        use super::TestError;
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

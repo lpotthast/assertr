@@ -1,4 +1,7 @@
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{
+    AssertThat, Mode,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 property_expectation! {
     /// Checks that a boolean is true.
@@ -63,8 +66,10 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -85,8 +90,9 @@ mod tests {
     }
 
     mod is_true {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

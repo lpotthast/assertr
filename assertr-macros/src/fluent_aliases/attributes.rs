@@ -1,7 +1,6 @@
 //! Recognition and parsing of fluent-alias helper attributes.
 
-use syn::punctuated::Punctuated;
-use syn::{Attribute, LitStr, Meta, Token};
+use syn::{Attribute, LitStr, Meta, Token, punctuated::Punctuated};
 
 const HELPER_ATTRIBUTES: [&str; 2] = ["fluent_alias", "no_fluent_alias"];
 

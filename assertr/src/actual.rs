@@ -35,6 +35,17 @@ impl<T> Actual<'_, T> {
             Actual::Owned(t) => t,
         }
     }
+
+    /// Returns the owned subject, cloning only when the subject is borrowed.
+    pub fn into_owned(self) -> T
+    where
+        T: Clone,
+    {
+        match self {
+            Actual::Borrowed(t) => t.clone(),
+            Actual::Owned(t) => t,
+        }
+    }
 }
 
 impl<T> From<T> for Actual<'_, T> {

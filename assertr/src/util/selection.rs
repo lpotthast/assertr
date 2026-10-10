@@ -160,10 +160,11 @@ pub(crate) fn select_smallest<T, K: Ord>(
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::prelude::*;
     use alloc::rc::Rc;
     use core::cell::Cell;
+
+    use super::*;
+    use crate::prelude::*;
 
     #[test]
     fn matches_stable_full_sort_with_duplicates_at_every_limit() {

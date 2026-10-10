@@ -40,10 +40,11 @@ pub use failures::AssertionFailures;
 pub(crate) mod panic_presentation;
 pub(crate) mod report;
 
-use crate::{AssertThat, prelude::Mode, renderer::Rendered};
 use alloc::{borrow::Cow, boxed::Box, string::String, vec::Vec};
 
 pub use builder::FailureBuilder;
+
+use crate::{AssertThat, prelude::Mode, renderer::Rendered};
 
 /// Delimiter opening and closing every rendered failure message.
 pub(crate) const BANNER: &str = "-------- assertr --------\n";
@@ -290,11 +291,7 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
         location: &'static core::panic::Location<'static>,
     ) {
         let state = &self.state;
-        let mut failure = failure.build();
-        failure.location = state.include_location.then_some(location);
-        failure.subject_name.clone_from(&state.subject_name);
-        failure.expression = state.expression.get();
-        state.records.collect_messages(&mut failure.messages);
+        let failure = self.complete_failure(failure, location);
 
         if M::CAPTURES {
             state.records.store_failure(
@@ -306,6 +303,22 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
             let text = panic_presentation::render(&failure, state.panic_presentation.as_deref());
             panic!("{text}");
         }
+    }
+
+    /// Completes failure metadata without presenting, panicking, or recording it.
+    pub(crate) fn complete_failure(
+        &self,
+        failure: FailureBuilder,
+        location: &'static core::panic::Location<'static>,
+    ) -> AssertionFailure {
+        let state = &self.state;
+        let mut failure = failure.build();
+        failure.location = state.include_location.then_some(location);
+        failure.subject_name.clone_from(&state.subject_name);
+        failure.expression = state.expression.get();
+        state.records.collect_messages(&mut failure.messages);
+
+        failure
     }
 }
 

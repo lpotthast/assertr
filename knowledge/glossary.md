@@ -39,7 +39,7 @@ for detailed requirements and exceptions.
 | [ChainRecords](assertion-lifecycle.md#chain-representation) | Private storage for messages, assertion counts, failures, and an optional link to parent records. |
 | [Root chain](assertion-lifecycle.md#chain-representation) | Chain with no parent-record link. |
 | [Child chain](assertion-lifecycle.md#chain-representation) | Derived chain linked to ancestor records. |
-| [Detached chain](observation-boundaries.md#eventual-observations) | Private `DetachedChain`: a panic-mode chain's diagnostic settings and collected messages without its subject and records, kept across awaits and attached again as a root. |
+| [Detached chain](observation-boundaries.md#eventual-observations) | Private `DetachedChain`, produced by `AssertThat::into_parts`: a panic-mode chain's diagnostic settings and collected messages without its subject and records, kept across awaits and attached again as a root. |
 | [Unwind safety](assertion-lifecycle.md#unwind-safety) | `UnwindSafe` and `RefUnwindSafe` requirements when catching panics. |
 
 ## Entry and continuation
@@ -126,4 +126,5 @@ for detailed requirements and exceptions.
 | [Panic presentation](failure-processing.md#presentation-and-fallback) | Closure producing panic text from a failure. The private `PanicPresentation` type erases it. |
 | [Observation](observation-boundaries.md#eventual-observations) | Closure returning a future of a changing value, the subject of an eventual assertion. |
 | [Eventual assertion](observation-boundaries.md#eventual-observations) | `eventually` or `consistently`: observes repeatedly until an expectation holds, or while it keeps holding. |
+| [Give-up policy](observation-boundaries.md#eventual-observations) | `GiveUp` implementation deciding which failed observations end `eventually_ok`: `KeepRetrying`, `AnyError`, or a closure. |
 | [Patience](observation-boundaries.md#eventual-observations) | Timeout, polling interval, and consistency duration of eventual assertions: global, overridden per chain. |

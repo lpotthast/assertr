@@ -6,21 +6,16 @@
 //! diagnostics. Their evidence is recorded directly into the group of that slot or occurrence,
 //! through the normal budgeted context scopes.
 
-use crate::expectation::composite_items;
+use alloc::{collections::BTreeMap, vec::Vec};
+
 use crate::{
     assertions::collection::Collection,
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
-    failure::AssertionFailure,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
+    failure::{AssertionFailure, Fact, FailureBuilder, FailureKind},
     matchers::MatcherList,
-    renderer::RenderingOrder,
-    renderer::ValueRenderer,
+    renderer::{RenderingOrder, ValueRenderer},
     util::matching::{BipartiteMatchResult, assign_exactly},
 };
-use alloc::{collections::BTreeMap, vec::Vec};
 
 /// Exact one-to-one order-free matching, preserving multiplicity.
 #[derive(Debug, Clone)]
@@ -255,10 +250,12 @@ mod tests {
     }
 
     mod evaluate {
+        use core::cell::{Cell, RefCell};
+
+        use indoc::indoc;
+
         use super::*;
         use crate::matchers::{predicate, satisfying};
-        use core::cell::{Cell, RefCell};
-        use indoc::indoc;
 
         #[test]
         fn reports_rejected_and_surplus_occurrences() {
@@ -380,8 +377,7 @@ mod tests {
             use super::*;
             use crate::{
                 expectation::Expectation,
-                failure::Fact,
-                failure::{FailureBuilder, FailureKind},
+                failure::{Fact, FailureBuilder, FailureKind},
             };
 
             #[test]
@@ -868,8 +864,9 @@ mod tests {
 
         #[test]
         fn surplus_search_does_not_complete_unvisited_pairs_or_render() {
-            use crate::{assertions::core::partial_eq::eq, matchers::predicate};
             use core::cell::RefCell;
+
+            use crate::{assertions::core::partial_eq::eq, matchers::predicate};
             struct NeverRender;
             impl<T: ?Sized> ValueRenderer<T> for NeverRender {
                 fn fmt(&self, _: &T, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
@@ -893,8 +890,9 @@ mod tests {
 
         #[test]
         fn stops_at_the_first_unassignable_occurrence() {
-            use crate::matchers::predicate_list;
             use core::cell::Cell;
+
+            use crate::matchers::predicate_list;
             let calls = Cell::new(0);
             let counted = |expected: usize| {
                 let calls = &calls;

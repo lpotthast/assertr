@@ -1,9 +1,6 @@
-use crate::expectation::composite_items;
 use crate::{
     assertions::collection::Collection,
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{FailureBuilder, FailureKind},
 };
 

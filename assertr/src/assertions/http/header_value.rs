@@ -1,11 +1,13 @@
-use crate::assertions::HasLength;
-use crate::failure::FailureKind;
-use crate::mode::{Mode, Panic};
-use crate::renderer::{Rendered, RenderingContext};
-use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
-use alloc::borrow::ToOwned;
-use alloc::string::String;
+use alloc::{borrow::ToOwned, string::String};
+
+use crate::{
+    AssertThat,
+    assertions::HasLength,
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    mode::{Mode, Panic},
+    renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
+};
 
 /// Renders a header value with its contents visible, even when it is marked sensitive.
 ///
@@ -201,8 +203,9 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use http::HeaderValue;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -223,12 +226,15 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{
-            NoRenderer, RedactingRenderer, SENTINEL, SentinelRenderer, assert_redacted,
-            assert_trait_impl,
-        };
         use http::HeaderValue;
+
+        use crate::{
+            prelude::*,
+            test_support::{
+                NoRenderer, RedactingRenderer, SENTINEL, SentinelRenderer, assert_redacted,
+                assert_trait_impl,
+            },
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -275,8 +281,9 @@ mod tests {
 
     #[test]
     fn length_assertions_count_header_bytes() {
-        use crate::prelude::*;
         use http::HeaderValue;
+
+        use crate::prelude::*;
 
         assert_that!(HeaderValue::from_static("")).is_empty();
         assert_that!(HeaderValue::from_static("http/1.1"))
@@ -287,9 +294,10 @@ mod tests {
     }
 
     mod is_sensitive {
-        use crate::prelude::*;
         use http::HeaderValue;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -325,9 +333,10 @@ mod tests {
     }
 
     mod is_insensitive {
-        use crate::prelude::*;
         use http::HeaderValue;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -362,9 +371,10 @@ mod tests {
     }
 
     mod is_ascii {
-        use crate::prelude::*;
         use http::header::HeaderValue;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -413,8 +423,9 @@ mod tests {
     }
 
     mod get_ascii {
-        use crate::prelude::*;
         use http::header::HeaderValue;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -443,8 +454,9 @@ mod tests {
     }
 
     mod is_ascii_satisfying {
-        use crate::prelude::*;
         use http::header::HeaderValue;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

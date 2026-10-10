@@ -31,6 +31,8 @@ each feature enables. [CI](../.github/workflows/ci.yml) and [Justfile](../Justfi
 | `libm` | Floating-point classification checks when `num` is enabled without `std`. Neither `libm` nor `std` implicitly enables `num`. |
 | `jiff`, `tokio`, `program`, `reqwest`, `http` | Enable `std` for wrapped std-only dependencies. |
 | `rootcause`, `serde-json`, `serde-toml`, `serde` | Support embedded `no_std` with `alloc` without enabling runtime `std`. `std` enables the `std` features of `serde_json` and `toml` through weak edges. `serde` combines JSON and TOML. |
+| `thirtyfour` | Enables `std` and typed WebDriver assertions, without selecting an HTTP client, TLS backend, or browser manager. |
+| `thirtyfour-cdp` | Adds Chromium description reads using typed CDP commands and serde derives. |
 | `full` | Every optional API and integration. |
 
 Core assertions, capture, structured failures, rendering, tree collections, and iterator scans remain available without `std`.

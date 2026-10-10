@@ -1,12 +1,9 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     assertions::map::{Map, MapLookup},
-    expectation::AssertionContext,
-    expectation::Expectation,
-    expectation::{Evidence, context::unsatisfied},
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Evidence, Expectation, context::unsatisfied},
     failure::{FailureBuilder, FailureKind, PathSegment},
-    renderer::RenderingContext,
-    renderer::ValueRenderer,
+    renderer::{RenderingContext, ValueRenderer},
 };
 
 /// A value matcher under one native map key query.
@@ -181,6 +178,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::{collections::BTreeMap, string::String};
+
     use super::entry;
     use crate::{
         assertions::core::partial_eq::eq,
@@ -188,7 +187,6 @@ mod tests {
         matchers::anything,
         prelude::*,
     };
-    use alloc::{collections::BTreeMap, string::String};
 
     #[test]
     fn accepts_borrowed_key_queries() {

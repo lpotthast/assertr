@@ -1,11 +1,11 @@
-use crate::renderer::{Rendered, RenderingContext};
+use std::sync::{Mutex, MutexGuard, TryLockError};
+
 use crate::{
-    AssertThat, Mode, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    AssertThat, Mode,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
 };
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
-use std::sync::MutexGuard;
-use std::sync::{Mutex, TryLockError};
 
 property_expectation! {
     /// Checks whether a mutex is poisoned.
@@ -236,8 +236,9 @@ impl<T, M: Mode, R> MutexAssertions<T, R> for AssertThat<'_, Mutex<T>, M, R> {
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use std::sync::Mutex;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -254,15 +255,17 @@ mod tests {
         }
     }
 
-    use crate::prelude::*;
     use std::sync::Mutex;
 
+    use crate::prelude::*;
+
     mod renderer_contract {
+        use std::sync::Mutex;
+
         use crate::{
             prelude::*,
             test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
         };
-        use std::sync::Mutex;
 
         struct Secret;
 
@@ -325,9 +328,11 @@ mod tests {
     }
 
     mod is_locked {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::sync::Mutex;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -386,9 +391,11 @@ mod tests {
     }
 
     mod is_not_locked {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::sync::Mutex;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -434,8 +441,9 @@ mod tests {
     /// Synonym of `is_not_locked`. The fluent name and caller location are pinned here. The
     /// behavior is covered by that module.
     mod is_free {
-        use crate::prelude::*;
         use std::sync::Mutex;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -446,9 +454,11 @@ mod tests {
     }
 
     mod is_poisoned {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::sync::Mutex;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -480,9 +490,9 @@ mod tests {
     }
 
     mod is_not_poisoned {
-        use crate::prelude::*;
-
         use std::sync::Mutex;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

@@ -1,5 +1,7 @@
 use crate::{
-    AssertThat, Mode, expectation::Expectation, renderer::DebugRenderer, renderer::ValueRenderer,
+    AssertThat, Mode,
+    expectation::Expectation,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Defines a string expectation evaluated on the subject's [`AsRef<str>`] view.
@@ -391,8 +393,9 @@ mod tests {
     }
 
     mod evaluation {
-        use crate::{prelude::*, test_support::SentinelRenderer};
         use core::cell::Cell;
+
+        use crate::{prelude::*, test_support::SentinelRenderer};
 
         struct Text<'a> {
             value: &'a str,
@@ -467,10 +470,11 @@ mod tests {
 
         #[test]
         fn operand_methods_render_and_redact_the_string_views() {
+            use indoc::formatdoc;
+
             use crate::test_support::{
                 CustomValueRenderer, RedactingRenderer, assert_custom_value, assert_redacted,
             };
-            use indoc::formatdoc;
 
             let subject = String::from("private-value");
             macro_rules! case {
@@ -546,8 +550,9 @@ mod tests {
     }
 
     mod is_blank {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -706,8 +711,9 @@ mod tests {
 
         #[test]
         fn matcher_renders_retained_string_views_without_subject_renderer_bounds() {
-            use crate::assertions::core::string::StartsWith;
             use core::{cell::Cell, fmt};
+
+            use crate::assertions::core::string::StartsWith;
 
             struct Text<'a>(&'a str, Cell<usize>);
             impl AsRef<str> for Text<'_> {
@@ -798,8 +804,9 @@ mod tests {
     /// One blanket implementation serves every `AsRef<str>` subject, so all string-like types have
     /// to produce the same assertion-specific descriptions for the same content.
     mod every_string_like_type {
-        use crate::prelude::*;
         use alloc::borrow::Cow;
+
+        use crate::prelude::*;
 
         #[test]
         fn all_string_like_subjects_pass_the_same_assertions() {

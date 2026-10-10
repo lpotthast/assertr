@@ -12,8 +12,7 @@ use crate::{
     assertions::collection::Placement,
     borrow_for::{BorrowFor, borrow_for},
     expectation::{Evidence, context::unsatisfied},
-    failure::Fact,
-    failure::PathSegment,
+    failure::{Fact, PathSegment},
     matchers::MatcherList,
 };
 
@@ -426,16 +425,18 @@ where
 
 #[cfg(test)]
 mod tests {
-    use super::*;
-    use crate::failure::PathSegment;
-    use crate::prelude::*;
     use alloc::vec::Vec;
     use core::cell::Cell;
+
     use indoc::formatdoc;
 
+    use super::*;
+    use crate::{failure::PathSegment, prelude::*};
+
     mod evidence_budget {
-        use super::*;
         use core::fmt;
+
+        use super::*;
 
         struct Renderer<'a>(&'a Cell<usize>);
         impl ValueRenderer<Compared<'_>> for Renderer<'_> {
@@ -701,15 +702,15 @@ mod tests {
     }
 
     mod matchers {
+        use core::cell::Cell;
+
         use crate::{
             expectation::Expectation,
+            failure::{FailureBuilder, FailureKind},
             prelude::*,
             renderer::{Rendered, RenderedBody},
             test_support::CustomValueRenderer,
         };
-        use core::cell::Cell;
-
-        use crate::failure::{FailureBuilder, FailureKind};
 
         mod evidence_budget {
             use super::*;

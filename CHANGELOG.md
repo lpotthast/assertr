@@ -56,8 +56,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `Result`. They end with any matcher (`matches`) or assertion callback (`satisfies`) and continue on the observed
   value. Failures add how long and how often the value was observed, and the values seen. `Patience` sets the timeout,
   polling interval, and consistency duration: fast defaults (1 s, 10 ms, 100 ms), `Patience::set_global` for a test
-  suite, and `within`, `polling_every`, `for_at_least`, and `with_patience` for one chain. They run in any async
-  runtime, and their futures are `Send` whenever the observation, expectation, and renderer are.
+  suite, and `within`, `polling_every`, `for_at_least`, and `with_patience` for one chain. An observation still
+  pending at the timeout fails the assertion instead of hanging it. They run in any async runtime, and their futures
+  are `Send` whenever the observation, expectation, and renderer are.
+  `eventually_ok().giving_up_on(|error| ..)` ends the assertion at the first error no retry can fix instead of
+  retrying it until the timeout, and `giving_up_on_any_error()` ends it at any error. `EventualAssertions` and
+  `Patience` are exported from `assertions` and the prelude, the builders and retry policies from
+  `assertions::eventually`. `try_matches` instead returns the observed value or a boxed `AssertionFailure`, with
+  the same retry policy, deadlines, caller metadata, and observation history as `matches`.
+- Optional `thirtyfour` integration extracts browser element attributes, properties, text, state, and computed
+  accessibility into ordinary assertion chains. `has_attribute` checks presence and continues on the string for
+  equality, prefixes, and other assertions. Async reads preserve caller diagnostics and support `Send` futures.
+  `thirtyfour-cdp` adds Chromium accessibility descriptions. The fallible reads in `assertions::thirtyfour::read`
+  compose with eventual and consistency assertions. Neither feature selects a browser manager or HTTP client.
+- `Actual::into_owned` moves an owned subject and clones a borrowed one.
+- `is_one_of(candidates)` and the `matchers::one_of` matcher (`IsOneOf`) check that the subject equals one of a
+  runtime list of values, borrowed like `is_equal_to`'s operand.
 - `AssertionFailure` and `AssertionFailures` implement `core::error::Error` with readable `Display` and `Debug` reports.
   `Fact` and `renderer::Rendered` expose their diagnostic data as public fields.
 - `RenderingContext` renders values, collections, maps, synthetic value and key/value lists, and one-field variants and

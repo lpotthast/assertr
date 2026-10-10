@@ -1,8 +1,6 @@
 use crate::{
     AssertThat,
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation},
     failure::{FailureBuilder, FailureKind},
     mode::Capture,
 };
@@ -111,9 +109,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::satisfying;
     use crate::prelude::*;
-    use core::cell::Cell;
 
     #[test]
     fn adapts_assertion_closures() {

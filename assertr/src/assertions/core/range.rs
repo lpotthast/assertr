@@ -1,22 +1,22 @@
-use super::partial_eq::operand_expectation;
-use crate::borrow_for::BorrowFor;
-use crate::{
-    AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::{FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::RenderingContext,
-    renderer::ValueRenderer,
-};
 use alloc::{
     format,
     string::{String, ToString},
 };
-use core::marker::PhantomData;
-use core::ops::{
-    Bound::{Excluded, Included, Unbounded},
-    RangeBounds,
+use core::{
+    marker::PhantomData,
+    ops::{
+        Bound::{Excluded, Included, Unbounded},
+        RangeBounds,
+    },
+};
+
+use super::partial_eq::operand_expectation;
+use crate::{
+    AssertThat, Mode,
+    borrow_for::BorrowFor,
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, RenderingContext, ValueRenderer},
 };
 
 /// Checks whether a range contains an element.
@@ -456,8 +456,9 @@ where
 mod tests {
     use core::ops::Bound::{self, Excluded, Included, Unbounded};
 
-    use crate::prelude::*;
     use indoc::formatdoc;
+
+    use crate::prelude::*;
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
@@ -819,8 +820,10 @@ mod tests {
     }
 
     mod reusable_definitions {
-        use super::super::{ContainsElement, DoesNotContainElement};
-        use super::*;
+        use super::{
+            super::{ContainsElement, DoesNotContainElement},
+            *,
+        };
         use crate::matchers::{all_of, each};
 
         #[test]

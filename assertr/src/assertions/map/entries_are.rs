@@ -1,10 +1,7 @@
 use super::entry::key_segment;
-use crate::expectation::composite_items;
 use crate::{
     assertions::map::{EntryMatcherList, FoundEntries, Map},
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation, composite_items},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
@@ -121,8 +118,9 @@ macro_rules! entries_are {
 
 #[cfg(test)]
 mod tests {
-    use crate::{matchers::eq, prelude::*, test_support::UnorderedMap};
     use alloc::collections::BTreeMap;
+
+    use crate::{matchers::eq, prelude::*, test_support::UnorderedMap};
 
     mod homogeneous_lists {
         use super::*;

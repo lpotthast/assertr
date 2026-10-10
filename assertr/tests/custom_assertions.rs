@@ -31,9 +31,9 @@ fn text_opt(value: Option<&assertr::renderer::Rendered>) -> Option<&str> {
 
 #[cfg(feature = "tokio")]
 mod watch_trait_imports {
-    use assertr::assertions::TokioWatchReceiverAssertions;
     use assertr::{
         assert_that,
+        assertions::TokioWatchReceiverAssertions,
         prelude::{BoolAssertions, LengthAssertions},
     };
 
@@ -76,9 +76,11 @@ mod watch_trait_imports {
 
 #[cfg(feature = "std")]
 mod path_renderer_bounds {
-    use super::text_opt;
-    use assertr::{matchers::path::DoesNotExist, prelude::*};
     use std::{fmt, io, path::PathBuf};
+
+    use assertr::{matchers::path::DoesNotExist, prelude::*};
+
+    use super::text_opt;
 
     // Deliberately neither Clone nor a renderer for any unrelated diagnostic type.
     struct PathAndErrorRenderer;
@@ -142,8 +144,9 @@ struct Metadata {
 }
 
 mod composed {
-    use super::{Metadata, Person};
     use assertr::prelude::*;
+
+    use super::{Metadata, Person};
 
     trait PersonAssertions<R = DebugRenderer> {
         fn has_age(self, expected: u32) -> Self
@@ -238,9 +241,11 @@ mod composed {
 }
 
 mod reusable_without_impl {
-    use assertr::expectation::AssertionContext;
-    use assertr::matchers::{field, ge, predicate};
-    use assertr::prelude::*;
+    use assertr::{
+        expectation::AssertionContext,
+        matchers::{field, ge, predicate},
+        prelude::*,
+    };
 
     #[derive(Debug)]
     struct Person {
@@ -343,11 +348,15 @@ mod reusable_without_impl {
 }
 
 mod leaf {
-    use super::Person;
-    use assertr::prelude::*;
-    use assertr::{failure::Fact, failure::FailureKind};
     use core::fmt;
+
+    use assertr::{
+        failure::{Fact, FailureKind},
+        prelude::*,
+    };
     use indoc::formatdoc;
+
+    use super::Person;
 
     trait PersonAssertions<R = DebugRenderer> {
         #[allow(clippy::wrong_self_convention)]
@@ -656,13 +665,13 @@ mod generated_fluent_aliases {
 #[allow(clippy::needless_pass_by_value)]
 #[cfg(feature = "num")]
 mod generic_num_traits_bounds {
-    use core::fmt::Debug;
-    use core::ops::{Add, Div, Mul, Neg, Rem, Sub};
+    use core::{
+        fmt::Debug,
+        ops::{Add, Div, Mul, Neg, Rem, Sub},
+    };
 
+    use assertr::{assertions::NumericDistance, prelude::*};
     use num_traits::{Num, One, Signed, Zero};
-
-    use assertr::assertions::NumericDistance;
-    use assertr::prelude::*;
 
     #[derive(Debug, PartialEq, PartialOrd)]
     struct Money(i64);
@@ -831,12 +840,13 @@ mod generic_num_traits_bounds {
 }
 
 mod callback_renderer_bounds {
+    use std::collections::{BTreeMap, LinkedList};
+
     use assertr::{
         assertions::{Collection, HasLength},
         prelude::*,
         renderer::CollectionPresentation,
     };
-    use std::collections::{BTreeMap, LinkedList};
 
     struct Secret;
 
@@ -990,21 +1000,20 @@ mod callback_renderer_bounds {
 }
 
 mod matcher_authoring {
-    use super::text_opt;
     use core::{
         cell::{Cell, Ref, RefCell},
         fmt,
     };
 
     use assertr::{
-        expectation::AssertionContext,
-        expectation::Evidence,
-        failure::Fact,
-        failure::{FailureBuilder, FailureKind},
+        expectation::{AssertionContext, Evidence},
+        failure::{Fact, FailureBuilder, FailureKind},
         matchers::{all_of, each},
         prelude::*,
         renderer::RenderedBody,
     };
+
+    use super::text_opt;
 
     // Retain a guarded observation, as assertions over cells, locks, and receivers need to do.
     struct HasText<'e>(&'e str);
@@ -1296,15 +1305,15 @@ mod matcher_authoring {
 }
 
 mod structural_rendering {
+    use core::fmt;
+
     use assertr::{
         assertions::Collection,
         expectation::AssertionContext,
-        failure::FailureKind,
-        failure::{FailureBuilder, PathSegment},
+        failure::{FailureBuilder, FailureKind, PathSegment},
         prelude::*,
         renderer::{CollectionPresentation, RenderedBody},
     };
-    use core::fmt;
 
     // Neither subjects nor leaves implement Debug. The renderer is deliberately not Clone.
     struct Token(&'static str);
@@ -1439,6 +1448,8 @@ mod structural_rendering {
 }
 
 mod borrowed_views {
+    use core::{borrow::Borrow, cmp::Ordering, fmt};
+
     use assertr::{
         borrow_for::BorrowFor,
         matchers::{
@@ -1447,7 +1458,6 @@ mod borrowed_views {
         },
         prelude::*,
     };
-    use core::{borrow::Borrow, cmp::Ordering, fmt};
 
     #[derive(PartialEq, PartialOrd)]
     struct Measurement(i32);
@@ -1566,13 +1576,14 @@ mod borrowed_views {
 }
 
 mod map_query_operands {
+    use core::{borrow::Borrow, fmt};
+    use std::collections::BTreeMap;
+
     use assertr::{
         borrow_for::BorrowFor,
         matchers::{entry, eq},
         prelude::*,
     };
-    use core::{borrow::Borrow, fmt};
-    use std::collections::BTreeMap;
 
     #[derive(PartialEq, Eq, PartialOrd, Ord)]
     struct StoredKey(String);

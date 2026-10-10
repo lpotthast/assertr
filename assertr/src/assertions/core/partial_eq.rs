@@ -1,6 +1,13 @@
-use crate::borrow_for::BorrowFor;
+use alloc::vec::Vec;
+use core::marker::PhantomData;
 
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{
+    AssertThat, Mode,
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, RenderingOrder, ValueRenderer},
+};
 
 /// Implements [`Expectation`](crate::expectation::Expectation) for a check of the subject against
 /// one stored operand.
@@ -135,6 +142,93 @@ impl<E> NotEqualTo<E> {
     }
 }
 
+/// Matches a subject equal to one of the listed values: an array, slice, or vector whose
+/// elements are compared like [`eq`]'s operand, so `&str` candidates match a `String` subject.
+///
+/// ```
+/// use assertr::{matchers::one_of, prelude::*};
+///
+/// let remaining = vec!["Toast 1", "Toast 3"];
+/// assert_that!(String::from("Toast 3")).matches(one_of(&remaining));
+/// ```
+pub struct IsOneOf<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+expected_operands_traits!(IsOneOf<E, B>, operand);
+
+impl<E, B: AsRef<[E]>> IsOneOf<E, B> {
+    /// Stores an array, slice, or vector of candidates without accessing their views.
+    #[must_use]
+    pub const fn new(candidates: B) -> Self {
+        Self {
+            expected: candidates,
+            operand: PhantomData,
+        }
+    }
+}
+
+/// Matches a subject equal to one of `candidates`. This is a convenience constructor for
+/// [`IsOneOf::new`].
+#[must_use]
+pub const fn one_of<E, B: AsRef<[E]>>(candidates: B) -> IsOneOf<E, B> {
+    IsOneOf::new(candidates)
+}
+
+impl<T: ?Sized, E, B, R> Expectation<T, R> for IsOneOf<E, B>
+where
+    T: PartialEq<E::View>,
+    E: BorrowFor<T>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<T> + ValueRenderer<E::View>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        let mut candidates = self.expected.as_ref().iter().map(borrow_for::<T, _>);
+        if candidates.any(|candidate| actual.eq(candidate)) {
+            Ok(())
+        } else {
+            Err(())
+        }
+    }
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a T, ())>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let candidates = self
+            .expected
+            .as_ref()
+            .iter()
+            .map(borrow_for::<T, _>)
+            .collect::<Vec<_>>();
+        let candidates = context
+            .render()
+            .borrowed_values::<E::View, _>(&candidates, RenderingOrder::PreserveIteration);
+        match rejected {
+            None => failure.relation("is one of").expected(candidates),
+            Some((actual, ())) => failure
+                .actual(context.render().value(actual))
+                .relation("is not one of")
+                .expected(candidates),
+        }
+    }
+}
+
 operand_expectation! {
     impl [T: ?Sized, E, R] for EqualTo<E>, subject T, where [
         T: PartialEq<E::View>,
@@ -224,6 +318,14 @@ pub trait PartialEqAssertions<T, R = DebugRenderer> {
         T: PartialEq<E::View>,
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
+
+    /// Asserts that the subject equals one of `candidates`, an array, slice, or vector whose
+    /// elements are borrowed like [`is_equal_to`](Self::is_equal_to)'s operand.
+    fn is_one_of<E>(self, candidates: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
 }
 
 impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
@@ -246,6 +348,16 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     {
         self.matches(NotEqualTo::new(expected))
     }
+
+    #[track_caller]
+    fn is_one_of<E>(self, candidates: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>,
+    {
+        self.matches(IsOneOf::new(candidates))
+    }
 }
 
 #[cfg(test)]
@@ -256,17 +368,66 @@ mod tests {
 
         #[test]
         fn are_as_expected() {
-            "foo".must().be_equal_to("foo").not_be_equal_to("bar");
+            "foo"
+                .must()
+                .be_equal_to("foo")
+                .not_be_equal_to("bar")
+                .be_one_of(["bar", "foo"]);
+        }
+    }
+
+    mod is_one_of {
+        use indoc::formatdoc;
+
+        use crate::{matchers::one_of, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(1), is_one_of([2, 3]));
+        }
+
+        #[test]
+        fn succeeds_for_any_listed_candidate_borrowing_each() {
+            assert_that!(String::from("b")).is_one_of(["a", "b"]);
+            assert_that!(String::from("b")).matches(one_of(vec!["b"]));
+            let candidates = [String::from("a"), String::from("b")];
+            assert_that!("a").is_one_of(&candidates[..]);
+        }
+
+        #[test]
+        fn panics_with_the_candidates() {
+            assert_that!(|| {
+                assert_that!(String::from("c"))
+                    .with_location(false)
+                    .is_one_of(["a", "b"]);
+            })
+            .panics()
+            .has_type::<String>()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `String::from("c")`
+
+                Actual: "c"
+
+                is not one of
+
+                Expected: [
+                    "a",
+                    "b",
+                ]
+                -------- assertr --------
+            "#});
         }
     }
 
     mod diagnostics {
+        use core::cell::RefCell;
+
         use super::super::{EqualTo, NotEqualTo};
         use crate::{
             failure::{FailureBuilder, FailureKind},
             prelude::*,
         };
-        use core::cell::RefCell;
 
         struct RecordingRenderer<'a>(&'a RefCell<Vec<i32>>);
         impl ValueRenderer<i32> for RecordingRenderer<'_> {
@@ -318,12 +479,13 @@ mod tests {
     }
 
     mod renderer_contract {
+        use core::borrow::Borrow;
+
         use crate::{
             borrow_for::BorrowFor,
             prelude::*,
             test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
         };
-        use core::borrow::Borrow;
 
         #[derive(PartialEq)]
         struct Actual(u32);
@@ -464,9 +626,10 @@ mod tests {
     // `operand_expectation!` is shared by the equality, ordering, range, and map value operands.
     // These tests cover its borrowing contract once.
     mod borrowed_operands {
+        use core::cell::Cell;
+
         use super::super::{EqualTo, NotEqualTo};
         use crate::{prelude::*, test_support::BorrowSpy};
-        use core::cell::Cell;
 
         #[derive(Debug, PartialEq)]
         struct Point {

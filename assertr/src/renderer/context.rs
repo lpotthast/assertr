@@ -4,17 +4,16 @@ use core::{
     fmt::{self, Debug, Write},
 };
 
+use super::{
+    GroupStyle, Rendered, RenderedBody, RenderingOrder, budget::RenderingBudget,
+    value::ValueRenderer,
+};
 use crate::{
     assertions::{
         collection::{Collection, StableOrder},
         map::Map,
     },
     util::selection::select_smallest,
-};
-
-use super::{
-    GroupStyle, Rendered, RenderedBody, RenderingOrder, budget::RenderingBudget,
-    value::ValueRenderer,
 };
 
 /// Renders diagnostic values with an assertion chain's renderer and output budget.
@@ -522,13 +521,12 @@ mod tests {
     };
     use core::{any::type_name, cell::RefCell, fmt};
 
+    use super::{RenderingContext, grouped_count, omission};
     use crate::{
         prelude::*,
         renderer::{GroupStyle, Rendered, RenderedBody, RenderingOrder},
         test_support::{PreservedBag, UnorderedMap, UnorderedSet},
     };
-
-    use super::{RenderingContext, grouped_count, omission};
 
     struct AlternateAwareRenderer;
 
@@ -583,8 +581,9 @@ mod tests {
     }
 
     mod bounded_sorting {
-        use super::*;
         use core::cell::Cell;
+
+        use super::*;
 
         // A full sort, applied to trees built by iteration-preserving paths.
         fn full_sort(mut tree: Rendered, limit: usize, pretty: bool) -> Rendered {

@@ -1,7 +1,6 @@
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
 };
 
@@ -160,13 +159,14 @@ mod tests {
         }
     }
 
+    use indoc::formatdoc;
+
     use crate::{
         failure::FailureKind,
         prelude::*,
         renderer::RenderedBody,
         test_support::{NoRenderer, assert_trait_impl},
     };
-    use indoc::formatdoc;
 
     struct Opaque {
         _byte: u8,

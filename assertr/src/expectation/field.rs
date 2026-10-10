@@ -1,10 +1,9 @@
+use core::fmt;
+
 use crate::{
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation},
     failure::{FailureBuilder, FailureKind, PathSegment},
 };
-use core::fmt;
 
 /// Applies a matcher to one field of the subject, locating its evidence at that field.
 ///
@@ -155,6 +154,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::{field, projected};
     use crate::{
         assertions::core::partial_eq::eq,
@@ -162,7 +163,6 @@ mod tests {
         matchers::predicate,
         prelude::*,
     };
-    use core::cell::Cell;
 
     #[test]
     fn scopes_projected_evidence_to_the_field() {

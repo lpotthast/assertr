@@ -1,9 +1,7 @@
 use crate::{
     AssertThat, Mode, Type,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
 };
 
 /// Checks the conservative [`core::mem::needs_drop`] property of a represented type.
@@ -77,9 +75,11 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::Type;
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            Type,
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -93,9 +93,9 @@ mod tests {
     }
 
     mod needs_drop {
-        use crate::assert_that_type;
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::{assert_that_type, prelude::*};
 
         #[test]
         fn caller_location_is_as_expected() {

@@ -1,8 +1,6 @@
 use super::lists::MatcherList;
 use crate::{
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
 };
 
@@ -73,9 +71,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::any_of;
     use crate::{assertions::core::partial_eq::eq, matchers::predicate, prelude::*};
-    use core::cell::Cell;
 
     #[test]
     fn stops_at_the_first_matching_branch() {

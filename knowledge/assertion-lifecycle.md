@@ -47,6 +47,7 @@ collect local messages before ancestor messages.
 | `assert_that!`       | Borrows and records expression text. Values and one reference layer select the same subject type for sized pointees. Unsized strings and slices remain reference-typed subjects. |
 | `assert_that_owned!` | Owns the input. Given `&T`, owns that reference.                                                                                                                                 |
 
+`Actual::into_owned` moves an owned subject or clones a borrowed one. `unwrap_owned` instead rejects borrowed subjects.
 Ownership is a runtime property of `Actual`, independent of mode. `Panic` presents and panics on rejection. `Capture`
 stores failures and continues. Whether a method supports capture depends on
 [what subject it can return after failure](#continuation-availability).
@@ -94,7 +95,8 @@ ownership. Borrowed payloads remain borrowed.
 Chains are neither `Send` nor `Sync`: their records are interior-mutable and may borrow parent records.
 A future retaining a chain across suspension cannot be `Send`. Async projections can be awaited locally. For a `Send` task,
 construct and finish the chain after required awaits. Capture callbacks return chains, never futures.
-[Eventual assertions](observation-boundaries.md#eventual-observations) are the exception: they detach the chain before
+[Eventual assertions](observation-boundaries.md#eventual-observations) and
+[thirtyfour observations](observation-boundaries.md#browser-element-observations) are exceptions: they detach the chain before
 their first suspension, so their futures are `Send` whenever the observation, expectation, and renderer are.
 The [async compile-fail examples](../assertr/src/crate_docs.md#async-code) demonstrate these limits.
 See [invocation and polling](observation-boundaries.md#invocation-and-polling) for operation timing and cancellation.

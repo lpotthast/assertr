@@ -1,14 +1,13 @@
 //! Tolerance checks for values with a computable distance, such as numbers and durations.
 
-use crate::borrow_for::{BorrowFor, borrow_for};
+use core::num::Wrapping;
+
 use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
-use core::num::Wrapping;
 
 /// Numeric values whose distance can be calculated without integer overflow.
 ///

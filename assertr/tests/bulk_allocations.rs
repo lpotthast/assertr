@@ -1,14 +1,15 @@
 //! Allocation regressions live in their own executable so the library can forbid unsafe code.
 
-use assertr::{
-    matchers::{collection, map},
-    prelude::*,
-};
 use std::{
     alloc::{GlobalAlloc, Layout, System},
     cell::Cell,
     collections::BTreeMap,
     hint::black_box,
+};
+
+use assertr::{
+    matchers::{collection, map},
+    prelude::*,
 };
 
 struct CountingAllocator;
@@ -285,9 +286,11 @@ fn callback_list_adapters_allocate_no_wrapper_vector() {
 }
 
 mod working_storage {
-    use super::*;
-    use assertr::borrow_for::BorrowFor;
     use std::borrow::Borrow;
+
+    use assertr::borrow_for::BorrowFor;
+
+    use super::*;
 
     #[derive(Clone, Copy, Debug)]
     struct Item(u64);

@@ -3,9 +3,9 @@
 /// Assertions and extraction for reports.
 pub mod report;
 
+use rootcause::{report_attachments::ReportAttachments, report_collection::ReportCollection};
+
 use crate::assertions::HasLength;
-use rootcause::report_attachments::ReportAttachments;
-use rootcause::report_collection::ReportCollection;
 
 impl<C: ?Sized, T> HasLength for ReportCollection<C, T> {
     fn length(&self) -> usize {

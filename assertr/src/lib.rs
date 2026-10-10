@@ -68,6 +68,8 @@
 //! | `serde`                                         | Both `serde-json` and `serde-toml`.                                                      |
 //! | `program`                                       | Checks that a program name or path resolves to an executable, like `which`.              |
 //! | `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name.                                    |
+//! | `thirtyfour`                                    | Async assertions on browser elements, extracting values for ordinary assertions.         |
+//! | `thirtyfour-cdp`                                | Chromium accessibility descriptions, in addition to `thirtyfour`.                        |
 //! | `full`                                          | All of the above.                                                                        |
 //!
 //! For `no_std`, disable the default features. `num`, `libm`, `partial`, `fluent`, `rootcause`, and
@@ -335,25 +337,24 @@ mod test_support;
 mod tracking;
 mod util;
 
-use actual::Actual;
 use alloc::{string::String, vec::Vec};
 use core::{
     cell::{Cell, RefCell},
     marker::PhantomData,
     panic::AssertUnwindSafe,
 };
-use failure::AssertionFailures;
-use mode::Mode;
-use renderer::{DebugRenderer, RenderingBudget};
 
 /// Borrowed view selection for assertion operands.
 pub use ::borrow_for;
-
+use actual::Actual;
 #[cfg(feature = "fluent")]
 pub use assertr_macros::fluent_expressions;
 #[cfg(feature = "fluent")]
 pub use entry::{IntoAssertContext, IntoOwnedAssertContext};
 pub use entry::{PanicValue, Type, assert_that_type};
+use failure::AssertionFailures;
+use mode::Mode;
+use renderer::{DebugRenderer, RenderingBudget};
 
 /// Constructs a partial matcher without annotating the production type.
 ///

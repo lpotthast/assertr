@@ -1,18 +1,16 @@
+use alloc::string::String;
+
 #[cfg(test)]
 use crate::renderer::RenderingBudget;
 use crate::{
     AssertThat,
     actual::Actual,
-    expectation::Evidence,
-    expectation::Expectation,
-    failure::AssertionFailure,
-    failure::{FailureBuilder, FailureKind, PathSegment, report},
+    expectation::{Evidence, Expectation},
+    failure::{AssertionFailure, FailureBuilder, FailureKind, PathSegment, report},
     mode::Capture,
-    renderer::DebugRenderer,
-    renderer::{RenderingContext, RenderingOrder},
+    renderer::{DebugRenderer, RenderingContext, RenderingOrder},
     util::selection::{Keyed, Smallest},
 };
-use alloc::string::String;
 
 /// The settings and evidence collector an [`Expectation`] runs with.
 ///
@@ -458,16 +456,15 @@ impl Default for AssertionContext<'static, DebugRenderer> {
 
 #[cfg(test)]
 mod tests {
-    use crate::{expectation::AssertionContext, matchers::predicate, prelude::*};
     use core::cell::Cell;
+
+    use crate::{expectation::AssertionContext, matchers::predicate, prelude::*};
 
     mod record {
         use super::*;
         use crate::{
             failure::{FailureBuilder, FailureKind, PathSegment},
-            renderer::DebugRenderer,
-            renderer::RenderingBudget,
-            renderer::RenderingOrder,
+            renderer::{DebugRenderer, RenderingBudget, RenderingOrder},
         };
 
         #[test]
@@ -532,6 +529,8 @@ mod tests {
     }
 
     mod assertion_children {
+        use core::fmt;
+
         use super::*;
         use crate::{
             assertions::{collection::each, core::partial_eq::eq},
@@ -539,7 +538,6 @@ mod tests {
             matchers::all_of,
             renderer::RenderingOrder,
         };
-        use core::fmt;
 
         struct Group<D>(D);
 

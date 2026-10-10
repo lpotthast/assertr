@@ -1,12 +1,9 @@
-use crate::assertions::HasLength;
-use crate::renderer::{Rendered, RenderingContext};
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    assertions::HasLength,
+    expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
 };
 
 // Emptiness failures show the subject type next to its value.
@@ -163,8 +160,10 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -208,8 +207,9 @@ mod tests {
     }
 
     mod is_empty {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -264,8 +264,9 @@ mod tests {
     }
 
     mod has_length {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -310,12 +311,13 @@ mod tests {
     // Assertion behavior and diagnostics live above. These checks cover built-in HasLength
     // adapters.
     mod adapters {
-        use crate::prelude::*;
         use alloc::{
             borrow::Cow,
             boxed::Box,
             collections::{BTreeMap, BTreeSet, BinaryHeap, LinkedList, VecDeque},
         };
+
+        use crate::prelude::*;
 
         #[test]
         fn sequences() {
@@ -389,8 +391,9 @@ mod tests {
     }
 
     mod evaluation {
-        use crate::{assertions::HasLength, prelude::*};
         use core::cell::Cell;
+
+        use crate::{assertions::HasLength, prelude::*};
 
         #[derive(Debug)]
         struct Length {

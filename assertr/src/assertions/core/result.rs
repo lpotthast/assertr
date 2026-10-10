@@ -1,12 +1,10 @@
 use crate::{
     AssertThat,
     assertions::support::{explain_variant, project_checked},
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Checks for `Ok` and returns a borrowed value on success.
@@ -237,8 +235,10 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         struct Secret;
 
@@ -274,8 +274,9 @@ mod tests {
     }
 
     mod is_ok {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -325,8 +326,9 @@ mod tests {
     }
 
     mod is_err {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {

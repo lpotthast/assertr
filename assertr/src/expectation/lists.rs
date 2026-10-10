@@ -1,3 +1,6 @@
+use alloc::vec::Vec;
+use core::marker::PhantomData;
+
 use super::{
     Expectation,
     predicate::{Predicate, predicate},
@@ -6,8 +9,6 @@ use crate::{
     __private::{Cons, Nil},
     expectation::AssertionContext,
 };
-use alloc::vec::Vec;
-use core::marker::PhantomData;
 
 pub(crate) mod sealed {
     pub trait Sealed {}
@@ -225,9 +226,10 @@ macro_rules! matchers {
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::*;
     use crate::prelude::*;
-    use core::cell::Cell;
 
     #[test]
     fn borrowed_callbacks_need_no_clone_or_item_renderer_and_descriptions_do_not_invoke_them() {

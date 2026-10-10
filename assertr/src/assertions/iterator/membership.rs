@@ -5,10 +5,8 @@ use super::{
 use crate::{
     assertions::{HasLength, collection::Collection},
     borrow_for::{BorrowFor, borrow_for},
-    expectation::Evidence,
-    expectation::Expectation,
-    failure::Fact,
-    failure::PathSegment,
+    expectation::{Evidence, Expectation},
+    failure::{Fact, PathSegment},
     renderer::CollectionPresentation,
 };
 
@@ -372,9 +370,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::*;
     use crate::{prelude::*, renderer::RenderedBody};
-    use core::cell::Cell;
 
     struct Operand<'a> {
         value: i32,
@@ -427,8 +426,9 @@ mod tests {
     }
 
     mod matcher_budget {
-        use crate::{failure::PathSegment, matchers::eq, prelude::*};
         use core::cell::Cell;
+
+        use crate::{failure::PathSegment, matchers::eq, prelude::*};
 
         #[test]
         fn membership_retains_the_first_rejected_candidates_or_the_empty_fallback() {

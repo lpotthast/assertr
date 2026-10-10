@@ -11,13 +11,14 @@
 mod assertions;
 mod imp;
 
-#[cfg(feature = "std")]
-use crate::renderer::RenderingOrder;
-use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
 use alloc::collections::BTreeSet;
 
 pub use assertions::SetAssertions;
 pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
+
+#[cfg(feature = "std")]
+use crate::renderer::RenderingOrder;
+use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
 
 /// Native membership lookup capability for a set collection.
 ///
@@ -101,9 +102,8 @@ where
 mod tests {
     use alloc::{collections::BTreeSet, vec::Vec};
 
-    use crate::prelude::*;
-
     use super::SetLookup;
+    use crate::prelude::*;
 
     fn assert_set_contract<S>(actual: &S, expected: &[i32])
     where

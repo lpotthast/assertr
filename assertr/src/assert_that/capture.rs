@@ -121,8 +121,9 @@ impl<'t, T, R> AssertThat<'t, T, Capture, R> {
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
     use indoc::formatdoc;
+
+    use crate::prelude::*;
 
     #[test]
     fn returned_context_collects_projections_and_renderer_changes_once() {

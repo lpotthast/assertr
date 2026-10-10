@@ -1,15 +1,14 @@
+use alloc::{boxed::Box, string::String};
+use core::any::{Any, type_name, type_name_of_val};
+
 use crate::{
     AssertThat, PanicValue,
     assertions::support::project_checked,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     mode::{Mode, Panic},
     renderer::DebugRenderer,
 };
-use alloc::{boxed::Box, string::String};
-use core::any::{Any, type_name, type_name_of_val};
 
 mod payload {
     use super::{Any, Box, PanicValue};
@@ -197,9 +196,11 @@ impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic,
 
 #[cfg(test)]
 mod tests {
-    use crate::{PanicValue, prelude::*};
     use core::any::Any;
+
     use indoc::formatdoc;
+
+    use crate::{PanicValue, prelude::*};
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {

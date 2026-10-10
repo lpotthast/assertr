@@ -1,4 +1,3 @@
-use crate::borrow_for::BorrowFor;
 use core::borrow::Borrow;
 
 use super::{
@@ -6,10 +5,13 @@ use super::{
     value,
 };
 use crate::{
-    AssertThat, Mode, expectation::Expectation, mode::Capture, renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    AssertThat, Mode,
+    borrow_for::BorrowFor,
+    expectation::{Expectation, lists::SatisfyingList},
+    matchers::satisfying,
+    mode::Capture,
+    renderer::{DebugRenderer, ValueRenderer},
 };
-use crate::{expectation::lists::SatisfyingList, matchers::satisfying};
 
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
@@ -361,8 +363,9 @@ mod tests {
     }
 
     mod contains {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -424,9 +427,11 @@ mod tests {
     }
 
     mod contains_matching {
-        use crate::{prelude::*, test_support::NoRenderer};
         use core::cell::Cell;
+
         use indoc::formatdoc;
+
+        use crate::{prelude::*, test_support::NoRenderer};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -528,8 +533,9 @@ mod tests {
     }
 
     mod contains_all {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -592,8 +598,9 @@ mod tests {
     }
 
     mod does_not_contain_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -662,8 +669,9 @@ mod tests {
     }
 
     mod does_not_contain {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -703,9 +711,9 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order {
-        use crate::prelude::*;
-
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[derive(Debug)]
         struct Actual(u8);
@@ -852,8 +860,9 @@ mod tests {
     }
 
     mod contains_exactly_in_any_order_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

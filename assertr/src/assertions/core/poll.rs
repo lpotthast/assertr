@@ -1,14 +1,13 @@
+use core::task::Poll;
+
 use crate::{
     AssertThat,
     assertions::support::{explain_variant, project_checked},
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     mode::{Mode, Panic},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
-use core::task::Poll;
 
 fn ready<T>(poll: Poll<T>) -> Option<T> {
     match poll {
@@ -174,9 +173,11 @@ impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic
 
 #[cfg(test)]
 mod tests {
-    use crate::{failure::FailureKind, prelude::*};
     use core::task::Poll;
+
     use indoc::formatdoc;
+
+    use crate::{failure::FailureKind, prelude::*};
 
     #[derive(Debug, PartialEq)]
     pub struct Foo {

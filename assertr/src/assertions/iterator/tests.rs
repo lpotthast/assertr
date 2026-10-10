@@ -1,10 +1,11 @@
 //! Resource lifetime and consumption contracts shared by every streaming family.
 
-use crate::{failure::AssertionFailures, matchers::eq, prelude::*};
 use core::{
     cell::{Cell, RefCell, RefMut},
     fmt,
 };
+
+use crate::{failure::AssertionFailures, matchers::eq, prelude::*};
 
 #[derive(Default)]
 struct State {
@@ -156,8 +157,9 @@ fn verify_failure(failures: &AssertionFailures, state: &State, failed: bool) {
 }
 
 mod direct {
-    use super::*;
     use Operation::{Contains, Contiguous, Exact, Prefix, Reject, Suffix, Unordered};
+
+    use super::*;
 
     type Case<'a> = (Operation, &'a [i32], &'a [i32], usize, bool, Option<usize>);
 
@@ -271,8 +273,9 @@ mod direct {
 }
 
 mod borrowed {
-    use super::*;
     use Operation::{Contains, Reject, Unordered};
+
+    use super::*;
 
     #[test]
     fn membership_and_unordered_adapters_retain_the_owning_iterator() {
@@ -431,8 +434,9 @@ mod borrowed {
 }
 
 mod release {
-    use super::*;
     use std::sync::{Arc, Mutex, MutexGuard};
+
+    use super::*;
 
     struct Guarded<'a> {
         _guard: MutexGuard<'a, ()>,
@@ -687,8 +691,9 @@ mod callbacks {
 }
 
 mod tracking {
-    use crate::prelude::*;
     use core::cell::Cell;
+
+    use crate::prelude::*;
 
     struct ObservedView<T, F> {
         values: [T; 1],
@@ -758,8 +763,9 @@ mod tracking {
 }
 
 mod reporting {
-    use crate::{failure::Fact, prelude::*};
     use std::sync::{Arc, Mutex};
+
+    use crate::{failure::Fact, prelude::*};
 
     #[test]
     fn failure_preview_is_capped_and_retains_the_decisive_item() {

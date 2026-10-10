@@ -124,9 +124,10 @@ fn value_arguments(method: &mut TraitItemFn) -> Vec<Ident> {
 
 #[cfg(test)]
 mod tests {
+    use std::fmt::Debug;
+
     use quote::quote;
     use renamed_assertr::prelude::*;
-    use std::fmt::Debug;
     use syn::{Attribute, TraitItemFn, parse_quote};
 
     use super::{alias_ident, generate_alias};

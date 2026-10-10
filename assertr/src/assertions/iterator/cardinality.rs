@@ -188,15 +188,16 @@ where
 #[cfg(test)]
 mod tests {
     mod length_scan {
+        use indoc::formatdoc;
+
         use super::super::LengthScan;
-        use crate::assertions::iterator::run;
         use crate::{
+            assertions::iterator::run,
             failure::AssertionFailures,
             prelude::*,
             renderer::RenderedBody,
             test_support::{CustomValueRenderer, assert_custom_fact, assert_custom_value},
         };
-        use indoc::formatdoc;
 
         #[test]
         fn the_iterator_stays_alive_through_explanation_without_repeating_its_hint() {

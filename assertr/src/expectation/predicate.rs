@@ -1,11 +1,11 @@
+use alloc::borrow::Cow;
+use core::fmt;
+
 use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
-use alloc::borrow::Cow;
-use core::fmt;
 
 /// A boolean closure with optional diagnostic relations.
 ///

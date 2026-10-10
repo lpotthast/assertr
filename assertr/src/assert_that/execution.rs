@@ -1,13 +1,13 @@
 //! Execution of reusable expectations and one-use observations on assertion chains.
 
+use core::panic::Location;
+
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
 };
-use core::panic::Location;
 
 impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Supplies the chain's rendering settings and location policy for expectation evaluation.
@@ -132,6 +132,8 @@ impl<T, R> AssertThat<'_, T, Panic, R> {
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::*;
     use crate::{
         expectation::Expectation,
@@ -139,12 +141,10 @@ mod tests {
         prelude::*,
         renderer::RenderingBudget,
     };
-    use core::cell::Cell;
 
     #[cfg(feature = "fluent")]
     mod matches_fluent_aliases {
-        use crate::matchers::eq;
-        use crate::prelude::*;
+        use crate::{matchers::eq, prelude::*};
 
         #[test]
         fn are_as_expected() {
@@ -153,8 +153,9 @@ mod tests {
     }
 
     mod matches {
-        use crate::{matchers::*, prelude::*};
         use indoc::indoc;
+
+        use crate::{matchers::*, prelude::*};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -207,8 +208,9 @@ mod tests {
     }
 
     mod one_use {
-        use super::*;
         use core::cell::RefCell;
+
+        use super::*;
 
         #[test]
         fn success_transfers_a_guard_without_renderer_support_or_repeated_observation() {

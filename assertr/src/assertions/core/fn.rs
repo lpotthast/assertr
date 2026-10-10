@@ -1,19 +1,18 @@
-use crate::{
-    AssertThat, PanicValue,
-    actual::Actual,
-    assertions::support::project_checked,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::{Fact, FailureBuilder, FailureKind},
-    mode::Panic,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
-};
 use alloc::{boxed::Box, string::String};
 use core::{
     any::Any,
     panic::{AssertUnwindSafe, Location},
     task::Poll,
+};
+
+use crate::{
+    AssertThat, PanicValue,
+    actual::Actual,
+    assertions::support::project_checked,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    mode::Panic,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// The message of a panic payload raised through `panic!` or `panic_any` with a `&str` or a
@@ -285,8 +284,10 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn traits_are_implemented_without_renderer_support() {
@@ -318,8 +319,9 @@ mod tests {
 
     mod fn_once {
         mod panics {
-            use crate::prelude::*;
             use indoc::formatdoc;
+
+            use crate::prelude::*;
 
             #[test]
             fn caller_location_is_as_expected() {
@@ -389,8 +391,9 @@ mod tests {
         }
 
         mod does_not_panic {
-            use crate::prelude::*;
             use indoc::formatdoc;
+
+            use crate::prelude::*;
 
             #[test]
             fn caller_location_is_as_expected() {
@@ -509,12 +512,13 @@ mod tests {
 
     mod async_fn_once {
         mod observations {
-            use crate::prelude::*;
             use core::{
                 cell::Cell,
                 pin::Pin,
                 task::{Context, Poll},
             };
+
+            use crate::prelude::*;
 
             struct PanickingFuture<'a> {
                 polls: &'a Cell<usize>,

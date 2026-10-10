@@ -3,13 +3,10 @@
 use super::RandomAccess;
 use crate::{
     AssertThat,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     mode::Panic,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Checks constant-time indexed access and returns the borrowed element when present.
@@ -147,8 +144,9 @@ mod tests {
     }
 
     mod get_at {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

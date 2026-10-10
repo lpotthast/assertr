@@ -8,7 +8,11 @@
 //! - Values become owned rendered trees when failures are built. Adapters decide how to use those
 //!   trees at the panic boundary or after capture.
 
-use assertr::{failure::Fact, failure::FailureKind, prelude::*, renderer::Rendered};
+use assertr::{
+    failure::{Fact, FailureKind},
+    prelude::*,
+    renderer::Rendered,
+};
 
 fn text(value: &Rendered) -> &str {
     match &value.body {
@@ -129,13 +133,13 @@ fn a_panic_inside_the_capture_closure_propagates_without_a_double_panic() {
 
 /// Failure-field routing stays here. Structural rendering behavior lives beside the renderer.
 mod fields {
-    use super::{text, text_opt};
     use assertr::{
-        failure::Fact,
-        failure::FailureKind,
+        failure::{Fact, FailureKind},
         prelude::*,
         renderer::{Rendered, RenderedBody},
     };
+
+    use super::{text, text_opt};
 
     #[test]
     fn an_unexpected_map_entry_retains_a_structured_tuple() {

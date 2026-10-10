@@ -229,32 +229,6 @@
 //! [`capture`](crate::AssertThat::capture) to inspect them, and see the [rendering
 //! guide](crate::renderer) to change how values are shown.
 
-pub use crate::{
-    assertions::{
-        collection::{
-            ContainsMatching, DoesNotContainMatching, Each, ElementsAre, ElementsAreInAnyOrder,
-            contains_contiguous_elements, contains_matching, does_not_contain_matching, each,
-            elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
-        },
-        core::{
-            partial_eq::{EqualTo, NotEqualTo, eq},
-            partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
-        },
-        distance::IsCloseTo,
-        map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
-    },
-    expectation::{
-        all_of::{AllOf, all_of},
-        any_of::{AnyOf, any_of},
-        anything::{Anything, anything},
-        dereferenced::{Dereferenced, dereferenced},
-        field::{Field, field},
-        lists::{MatcherList, predicate_list},
-        predicate::{Predicate, predicate},
-        satisfying::{Satisfying, satisfying},
-    },
-};
-
 /// Primitive, variant, length, formatting, and identity expectations are available directly.
 #[doc(inline)]
 pub use crate::assertions::{
@@ -269,6 +243,31 @@ pub use crate::assertions::{
         pattern::{DoesNotMatchPattern, Pattern},
         poll::{IsPending, IsReady},
         result::{IsErr, IsOk},
+    },
+};
+pub use crate::{
+    assertions::{
+        collection::{
+            ContainsMatching, DoesNotContainMatching, Each, ElementsAre, ElementsAreInAnyOrder,
+            contains_contiguous_elements, contains_matching, does_not_contain_matching, each,
+            elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
+        },
+        core::{
+            partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, one_of},
+            partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
+        },
+        distance::IsCloseTo,
+        map::{EntriesAre, Entry, EntryMatcherList, entries_are, entry, entry_matchers},
+    },
+    expectation::{
+        all_of::{AllOf, all_of},
+        any_of::{AnyOf, any_of},
+        anything::{Anything, anything},
+        dereferenced::{Dereferenced, dereferenced},
+        field::{Field, field},
+        lists::{MatcherList, predicate_list},
+        predicate::{Predicate, predicate},
+        satisfying::{Satisfying, satisfying},
     },
 };
 
@@ -460,9 +459,10 @@ pub mod watch {
 #[cfg(test)]
 mod tests {
     mod common_traits {
-        use crate::{matchers::*, prelude::*};
         use alloc::{format, string::String};
         use core::fmt::Debug;
+
+        use crate::{matchers::*, prelude::*};
 
         fn debug_and_clone<T: Debug + Clone>(value: &T) -> String {
             format!("{:?}", value.clone())

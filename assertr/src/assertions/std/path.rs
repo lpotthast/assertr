@@ -1,12 +1,11 @@
-use crate::renderer::Rendered;
+use std::{ffi::OsStr, fs::FileType, io, ops::Deref, path::Path};
+
 use crate::{
-    AssertThat, Mode, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    AssertThat, Mode,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, Rendered, ValueRenderer},
 };
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
-use std::fs::FileType;
-use std::ops::Deref;
-use std::{ffi::OsStr, io, path::Path};
 
 /// Whether an I/O error confirms that the inspected path is absent.
 ///
@@ -659,8 +658,9 @@ mod tests {
 
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -689,13 +689,18 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{
-            CustomValueRenderer, NoRenderer, RedactingRenderer, SENTINEL, SentinelRenderer,
-            assert_custom_value, assert_redacted, assert_trait_impl,
+        use std::{
+            ffi::OsStr,
+            path::{Path, PathBuf},
         };
-        use std::ffi::OsStr;
-        use std::path::{Path, PathBuf};
+
+        use crate::{
+            prelude::*,
+            test_support::{
+                CustomValueRenderer, NoRenderer, RedactingRenderer, SENTINEL, SentinelRenderer,
+                assert_custom_value, assert_redacted, assert_trait_impl,
+            },
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -803,12 +808,15 @@ mod tests {
     }
 
     mod observations {
-        use crate::assertions::std::path::DoesNotExist;
-        use crate::failure::{FailureBuilder, FailureKind};
-        use crate::prelude::*;
-        use crate::test_support::{CustomValueRenderer, assert_custom_value};
         use core::cell::Cell;
         use std::{ffi::OsStr, io, path::PathBuf};
+
+        use crate::{
+            assertions::std::path::DoesNotExist,
+            failure::{FailureBuilder, FailureKind},
+            prelude::*,
+            test_support::{CustomValueRenderer, assert_custom_value},
+        };
 
         #[test]
         fn evaluation_confirms_existence_only_from_conclusive_observations() {
@@ -891,9 +899,11 @@ mod tests {
     }
 
     mod exists {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::path::Path;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -937,9 +947,11 @@ mod tests {
     }
 
     mod does_not_exist {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::path::Path;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1008,8 +1020,9 @@ mod tests {
     }
 
     mod entry_kinds {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_locations_are_as_expected() {
@@ -1104,9 +1117,11 @@ mod tests {
     }
 
     mod has_a_root {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::path::Path;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1137,8 +1152,9 @@ mod tests {
     }
 
     mod is_relative {
-        use crate::prelude::*;
         use std::path::Path;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1155,9 +1171,11 @@ mod tests {
     }
 
     mod components {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::path::Path;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_locations_are_as_expected() {
@@ -1225,8 +1243,9 @@ mod tests {
     }
 
     mod affixes {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_locations_are_as_expected() {
@@ -1273,8 +1292,9 @@ mod tests {
     }
 
     mod adapters {
-        use crate::prelude::*;
         use std::path::PathBuf;
+
+        use crate::prelude::*;
 
         #[test]
         fn failure_retains_the_subject_name_without_requiring_a_clone_renderer() {

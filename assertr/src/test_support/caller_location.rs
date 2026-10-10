@@ -1,9 +1,5 @@
 //! Exact assertion call-site checks without fixed source coordinates.
 
-use crate::{
-    failure::AssertionFailure,
-    prelude::{PartialEqAssertions, ResultAssertions, assert_that},
-};
 use alloc::{
     boxed::Box,
     string::{String, ToString},
@@ -12,6 +8,11 @@ use alloc::{
 };
 use core::panic::{Location, RefUnwindSafe};
 use std::sync::Mutex;
+
+use crate::{
+    failure::AssertionFailure,
+    prelude::{PartialEqAssertions, ResultAssertions, assert_that},
+};
 
 /// A panic presentation recording the failure's location before producing the default report.
 pub(crate) type LocationRecorder =

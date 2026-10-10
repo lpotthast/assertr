@@ -1,5 +1,3 @@
-use crate::borrow_for::BorrowFor;
-
 use super::{
     Map, MapLookup, entries_are,
     entry_matcher_list::SatisfyingEntryList,
@@ -7,8 +5,13 @@ use super::{
     matching::{ContainsEntryMatching, ContainsValueMatching},
 };
 use crate::{
-    AssertThat, Mode, assertions::map::EntryMatcherList, expectation::Expectation,
-    matchers::satisfying, mode::Capture, renderer::DebugRenderer, renderer::ValueRenderer,
+    AssertThat, Mode,
+    assertions::map::EntryMatcherList,
+    borrow_for::BorrowFor,
+    expectation::Expectation,
+    matchers::satisfying,
+    mode::Capture,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
@@ -460,8 +463,9 @@ mod tests {
     }
 
     mod contains_key {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -501,8 +505,9 @@ mod tests {
     }
 
     mod does_not_contain_key {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -544,8 +549,9 @@ mod tests {
     }
 
     mod contains_value {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -592,8 +598,9 @@ mod tests {
     }
 
     mod does_not_contain_value {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -635,8 +642,9 @@ mod tests {
     }
 
     mod contains_entry {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -739,8 +747,9 @@ mod tests {
     }
 
     mod does_not_contain_entry {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -787,8 +796,9 @@ mod tests {
     }
 
     mod contains_keys {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -838,8 +848,9 @@ mod tests {
     }
 
     mod contains_exactly_entries {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         fn report(expected: &[(&'static str, i32)]) -> String {
             let map = BTreeMap::from([("a", 1)]);
@@ -1041,9 +1052,10 @@ mod tests {
 
     #[allow(clippy::trivially_copy_pass_by_ref)]
     mod contains_exactly_entries_matching {
+        use indoc::formatdoc;
+
         use super::*;
         use crate::matchers::{entry, entry_matchers, eq, predicate};
-        use indoc::formatdoc;
 
         fn is_one(value: &i32) -> bool {
             *value == 1
@@ -1349,6 +1361,8 @@ mod tests {
     }
 
     mod operands {
+        use core::cell::Cell;
+
         use super::*;
         use crate::{
             assertions::map::{
@@ -1358,7 +1372,6 @@ mod tests {
             matchers::{entries_are, entry, eq},
             test_support::{StrOperand, StringRenderer},
         };
-        use core::cell::Cell;
 
         #[test]
         fn borrowed_and_unsized_views_work_with_native_string_key_queries() {
@@ -1454,6 +1467,8 @@ mod tests {
 
     /// Native lookups, comparisons, and operand borrows, observed through the shared fixture.
     mod observation {
+        use core::cell::Cell;
+
         use super::*;
         use crate::{
             assertions::map::{
@@ -1462,11 +1477,9 @@ mod tests {
                     Events, Inputs, ObservedMap, Query, Value, count, take_observations, value,
                 },
             },
-            matchers::{anything, satisfying},
-            matchers::{entries_are, entry, eq},
+            matchers::{anything, entries_are, entry, eq, satisfying},
             test_support::StringRenderer,
         };
-        use core::cell::Cell;
 
         #[test]
         fn single_entry_checks_borrow_and_look_up_once() {

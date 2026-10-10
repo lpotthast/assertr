@@ -10,19 +10,19 @@
 //! `HttpHeaderValueAssertions`: `reqwest` re-exports `http`'s header types, so the two
 //! integrations meet on the same `HeaderValue`.
 
+use alloc::{borrow::ToOwned, string::String, vec::Vec};
+use core::panic::Location;
+
+use reqwest::header::HeaderValue;
+
 use crate::{
     AssertThat,
     actual::Actual,
-    failure::{Fact, FailureKind},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     mode::{Mode, Panic},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
-    renderer::{Rendered, RenderingContext, RenderingOrder},
+    renderer::{DebugRenderer, Rendered, RenderingContext, RenderingOrder, ValueRenderer},
 };
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
-use alloc::{borrow::ToOwned, string::String, vec::Vec};
-use core::panic::Location;
-use reqwest::header::HeaderValue;
 
 /// Compares the observed response status code.
 #[derive(Debug, Clone, Copy)]
@@ -718,14 +718,14 @@ fn render_header<R: ValueRenderer<HeaderValue>>(
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-    use crate::test_support::block_on;
     use core::{
         pin::Pin,
         task::{Context, Poll},
     };
-    use reqwest::ResponseBuilderExt;
-    use reqwest::header::HeaderValue;
+
+    use reqwest::{ResponseBuilderExt, header::HeaderValue};
+
+    use crate::{prelude::*, test_support::block_on};
 
     struct FailingBody;
 
@@ -822,8 +822,7 @@ mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
         use super::{ok_response, response};
-        use crate::prelude::*;
-        use crate::test_support::block_on;
+        use crate::{prelude::*, test_support::block_on};
 
         #[test]
         fn are_as_expected() {
@@ -850,10 +849,12 @@ mod tests {
 
     mod renderer_contract {
         use super::{RevealingRenderer, failing_response, header_response, response};
-        use crate::prelude::*;
-        use crate::test_support::{
-            CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
-            assert_redacted, assert_trait_impl, block_on,
+        use crate::{
+            prelude::*,
+            test_support::{
+                CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
+                assert_redacted, assert_trait_impl, block_on,
+            },
         };
 
         /// Renders everything a response assertion can need, except the response itself.
@@ -1105,9 +1106,10 @@ mod tests {
     }
 
     mod has_status_code {
+        use indoc::formatdoc;
+
         use super::{ok_response, response};
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1147,9 +1149,10 @@ mod tests {
     }
 
     mod status_classes {
+        use indoc::formatdoc;
+
         use super::response;
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_locations_are_as_expected() {
@@ -1220,9 +1223,10 @@ mod tests {
     }
 
     mod has_header {
+        use indoc::formatdoc;
+
         use super::{TextOnly, ok_response, response};
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1300,9 +1304,10 @@ mod tests {
     }
 
     mod does_not_have_header {
+        use indoc::formatdoc;
+
         use super::{header_response, ok_response, response};
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1361,10 +1366,10 @@ mod tests {
     }
 
     mod has_header_value {
-        use super::{header_response, ok_response, response};
-        use crate::prelude::*;
-        use crate::test_support::RedactingRenderer;
         use indoc::formatdoc;
+
+        use super::{header_response, ok_response, response};
+        use crate::{prelude::*, test_support::RedactingRenderer};
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1491,9 +1496,10 @@ mod tests {
     }
 
     mod get_text {
+        use indoc::formatdoc;
+
         use super::{block_on, failing_response, ok_response, response};
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1585,6 +1591,7 @@ mod tests {
         #[test]
         fn deserialization_runs_once_for_success_and_rejection() {
             use core::sync::atomic::{AtomicUsize, Ordering};
+
             use serde::de::Error;
 
             static CALLS: AtomicUsize = AtomicUsize::new(0);

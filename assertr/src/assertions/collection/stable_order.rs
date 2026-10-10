@@ -4,7 +4,6 @@
 //! module's public extension traits require [`StableOrder`](StableOrder), so unordered subjects do
 //! not implement a positional assertion family at all.
 
-use crate::borrow_for::BorrowFor;
 use core::borrow::Borrow;
 
 use super::{
@@ -13,14 +12,11 @@ use super::{
 };
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
-    expectation::lists::SatisfyingList,
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind},
+    borrow_for::BorrowFor,
+    expectation::{AssertionContext, Expectation, lists::SatisfyingList},
+    failure::{Fact, FailureBuilder, FailureKind},
     mode::{Capture, Panic},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
 
 /// Assertions over the elements of a collection whose order is stable and meaningful.
@@ -663,8 +659,9 @@ mod tests {
     mod get_first {
         use alloc::{collections::LinkedList, vec::Vec};
 
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -714,8 +711,9 @@ mod tests {
     }
 
     mod get_single {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -753,8 +751,9 @@ mod tests {
     }
 
     mod starts_with {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1121,9 +1120,9 @@ mod tests {
     }
 
     mod contains_exactly {
-        use crate::prelude::*;
-
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1329,8 +1328,9 @@ mod tests {
     }
 
     mod contains_exactly_matching {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -1437,8 +1437,9 @@ mod tests {
     }
 
     mod evaluation {
-        use crate::prelude::*;
         use core::cell::Cell;
+
+        use crate::prelude::*;
 
         struct Expected<'a> {
             values: [i32; 3],

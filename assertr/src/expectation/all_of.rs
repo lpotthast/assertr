@@ -1,8 +1,6 @@
 use super::lists::MatcherList;
 use crate::{
-    expectation::AssertionContext,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{AssertionContext, Evidence, Expectation},
     failure::{FailureBuilder, FailureKind},
 };
 

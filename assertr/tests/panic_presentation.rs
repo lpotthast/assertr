@@ -21,8 +21,8 @@ fn panic_text(action: impl FnOnce()) -> String {
         .expect("the panic payload should remain a String")
 }
 
-/// Counts its invocations and produces the default report. The closure is neither `Send`,
-/// `Sync`, nor `Clone`.
+/// Counts its invocations and produces the default report. The closure is `Send` and `Sync` but
+/// not `Clone`.
 fn counting(
     count: &Arc<AtomicUsize>,
 ) -> impl Fn(&AssertionFailure) -> String + RefUnwindSafe + Send + Sync + 'static {

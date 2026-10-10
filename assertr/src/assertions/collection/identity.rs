@@ -1,15 +1,15 @@
 //! Reusable borrowed-target identity expectations for finite collections.
 
+use alloc::vec::Vec;
+use core::{borrow::Borrow, marker::PhantomData, ptr};
+
 use super::{Collection, StableOrder};
 use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{Rendered, RenderingOrder},
     util::matching::assign_exactly,
 };
-use alloc::vec::Vec;
-use core::{borrow::Borrow, marker::PhantomData, ptr};
 
 const METADATA_NOTE: &str = "Some pointers have equal data addresses but different metadata.";
 
@@ -588,13 +588,14 @@ where
 
 #[cfg(test)]
 mod tests {
+    use indoc::formatdoc;
+
     use super::*;
     use crate::{
         prelude::*,
         renderer::{CollectionPresentation, Rendered, RenderedBody, RenderingContext},
         test_support::{NoRenderer, NumericRenderer, PreservedBag, UnorderedSet},
     };
-    use indoc::formatdoc;
 
     struct Opaque {
         _byte: u8,
@@ -1086,11 +1087,12 @@ mod tests {
     }
 
     mod adapters {
-        use super::*;
         use alloc::{
             collections::{BTreeSet, BinaryHeap, LinkedList, VecDeque},
             rc::Rc,
         };
+
+        use super::*;
 
         fn check_ordered<C: StableOrder + ?Sized>(actual: &C, expected: [&Opaque; 3])
         where
@@ -1316,8 +1318,9 @@ mod tests {
     }
 
     mod evaluation {
-        use super::*;
         use core::cell::Cell;
+
+        use super::*;
 
         #[test]
         fn membership_rejections_render_within_the_budget() {

@@ -322,9 +322,8 @@ mod tests {
     use alloc::{collections::BTreeMap, string::String, vec, vec::Vec};
     use core::fmt::Debug;
 
-    use crate::prelude::*;
-
     use super::{GroupStyle, Rendered, RenderedBody, short_rust_type_name};
+    use crate::prelude::*;
 
     fn leaf(text: &str) -> Rendered {
         Rendered::from(text)

@@ -1,12 +1,11 @@
+use core::cell::RefCell;
+
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
-use core::cell::RefCell;
 
 /// Observes whether a cell is borrowed, retaining an acquired borrow on rejection.
 #[derive(Debug, Clone, Copy)]
@@ -187,8 +186,9 @@ impl<T, M: Mode, R> RefCellAssertions<T, R> for AssertThat<'_, RefCell<T>, M, R>
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use core::cell::RefCell;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -209,9 +209,10 @@ mod tests {
     }
 
     mod observations {
+        use core::cell::RefCell;
+
         use super::super::{IsBorrowed, IsMutablyBorrowed, IsNotMutablyBorrowed};
         use crate::{matchers::all_of, prelude::*, test_support::NoRenderer};
-        use core::cell::RefCell;
 
         #[test]
         fn composed_checks_release_rejected_and_successful_borrows_between_siblings() {
@@ -231,9 +232,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
         use core::cell::RefCell;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         struct Secret;
 
@@ -260,9 +264,11 @@ mod tests {
     }
 
     mod is_borrowed {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::cell::RefCell;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -307,8 +313,9 @@ mod tests {
     }
 
     mod is_mutably_borrowed {
-        use crate::prelude::*;
         use std::cell::RefCell;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -327,9 +334,11 @@ mod tests {
     }
 
     mod is_not_mutably_borrowed {
-        use crate::prelude::*;
-        use indoc::formatdoc;
         use std::cell::RefCell;
+
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

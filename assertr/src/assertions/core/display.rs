@@ -1,14 +1,13 @@
+use alloc::{format, string::String};
+use core::fmt::Display;
+
 use super::debug::{compare_text, explain_text};
 use crate::{
     AssertThat, Mode,
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
-use alloc::{format, string::String};
-use core::fmt::Display;
 
 /// Compares the complete `Display` representation with the expected value's representation.
 /// Formatting determines truth even when diagnostic rendering is disabled or budgeted.
@@ -120,9 +119,10 @@ mod tests {
 
         #[test]
         fn formats_each_operand_once_in_ordinary_matching_and_probe_execution() {
-            use super::super::HasDisplayValue;
-            use crate::{expectation::AssertionContext, expectation::Expectation};
             use core::{cell::Cell, fmt};
+
+            use super::super::HasDisplayValue;
+            use crate::expectation::{AssertionContext, Expectation};
 
             struct Value<'a>(&'a Cell<usize>, &'a str);
             impl fmt::Display for Value<'_> {
@@ -168,8 +168,9 @@ mod tests {
         }
 
         mod with_number {
-            use crate::prelude::*;
             use indoc::formatdoc;
+
+            use crate::prelude::*;
 
             #[test]
             fn succeeds_when_equal_using_same_value() {

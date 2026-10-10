@@ -23,38 +23,37 @@ mod random_access;
 mod stable_order;
 mod value;
 
-use alloc::collections::{BinaryHeap, LinkedList, VecDeque};
-use alloc::vec::Vec;
-
-use crate::{
-    assertions::HasLength,
-    renderer::{CollectionPresentation, RenderingOrder},
+use alloc::{
+    collections::{BinaryHeap, LinkedList, VecDeque},
+    vec::Vec,
 };
 
+pub use assertions::CollectionAssertions;
 pub use each::{Each, each};
 pub use elements_are::{
     ElementsAre, contains_contiguous_elements, elements_are, ends_with_elements,
     starts_with_elements,
 };
 pub use elements_are_in_any_order::{ElementsAreInAnyOrder, elements_are_in_any_order};
-
-pub use assertions::CollectionAssertions;
+pub use identity::{
+    ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
+    DoesNotContainSameInstanceAs,
+};
 pub use matching::{
     ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
+};
+pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
+pub use stable_order::{
+    HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
 };
 pub use value::{
     Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
     DoesNotContain, EndsWith, StartsWith,
 };
 
-pub use identity::{
-    ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs,
-    DoesNotContainSameInstanceAs,
-};
-
-pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
-pub use stable_order::{
-    HasFirst, HasLast, HasSingle, StableOrderAssertions, StableOrderExtractAssertions,
+use crate::{
+    assertions::HasLength,
+    renderer::{CollectionPresentation, RenderingOrder},
 };
 
 /// Where an expected sequence must occur within an ordered subject.
@@ -316,11 +315,13 @@ where
 
 #[cfg(test)]
 mod tests {
-    use crate::prelude::*;
-    use alloc::collections::{BinaryHeap, LinkedList, VecDeque};
-    use alloc::vec::Vec;
+    use alloc::{
+        collections::{BinaryHeap, LinkedList, VecDeque},
+        vec::Vec,
+    };
 
     use super::{RandomAccess, StableOrder};
+    use crate::prelude::*;
 
     struct Holder {
         deque: VecDeque<i32>,

@@ -1,14 +1,18 @@
 //! Assertions for resolving executable programs.
 
-use crate::mode::{Mode, Panic};
-use crate::{
-    Actual, AssertThat, failure::Fact, failure::FailureKind, renderer::DebugRenderer,
-    renderer::ValueRenderer,
-};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use alloc::borrow::Cow;
-use std::ffi::{OsStr, OsString};
-use std::path::PathBuf;
+use std::{
+    ffi::{OsStr, OsString},
+    path::PathBuf,
+};
+
+use crate::{
+    Actual, AssertThat,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    mode::{Mode, Panic},
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Resolves an executable program once, returning its path or lookup error.
 #[derive(Debug, Clone, Copy)]
@@ -249,8 +253,9 @@ mod tests {
     }
 
     mod exists {
-        use super::*;
         use indoc::formatdoc;
+
+        use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {

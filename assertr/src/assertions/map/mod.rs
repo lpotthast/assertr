@@ -17,19 +17,18 @@ mod matching;
 use alloc::collections::BTreeMap;
 use core::borrow::Borrow;
 
-use crate::{assertions::HasLength, renderer::RenderingOrder};
-
+pub use assertions::MapAssertions;
 pub use entries_are::{EntriesAre, entries_are};
 pub use entry::{Entry, EntryRejection, entry};
 pub use entry_matcher_list::{EntryMatcherList, entry_matchers};
-
-pub use assertions::MapAssertions;
 pub(crate) use imp::FoundEntries;
 pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
     DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
 };
 pub use matching::{ContainsEntryMatching, ContainsValueMatching};
+
+use crate::{assertions::HasLength, renderer::RenderingOrder};
 
 /// A keyed collection supporting iteration over its entries.
 ///
@@ -205,14 +204,6 @@ where
 /// Instrumented maps, keys, and operands that record every observation in one shared log.
 #[cfg(test)]
 pub(super) mod fixture {
-    use super::{Map, MapLookup};
-    use crate::{
-        assertions::HasLength,
-        borrow_for::BorrowFor,
-        renderer::RenderingOrder,
-        renderer::ValueRenderer,
-        test_support::{StrOperand, StringRenderer},
-    };
     use alloc::{string::String, vec::Vec};
     use core::{
         borrow::Borrow,
@@ -220,6 +211,14 @@ pub(super) mod fixture {
         cmp::Ordering,
         fmt,
         hash::{Hash, Hasher},
+    };
+
+    use super::{Map, MapLookup};
+    use crate::{
+        assertions::HasLength,
+        borrow_for::BorrowFor,
+        renderer::{RenderingOrder, ValueRenderer},
+        test_support::{StrOperand, StringRenderer},
     };
 
     /// Observations in the order they happened.
@@ -414,15 +413,14 @@ mod tests {
         borrow::Cow, boxed::Box, collections::BTreeMap, rc::Rc, string::String, sync::Arc, vec::Vec,
     };
 
+    use super::{
+        Map, MapLookup, RenderingOrder,
+        fixture::{CountingKey, Events, count},
+    };
     use crate::{
         assertions::HasLength,
         matchers::{entry, entry_matchers, predicate},
         prelude::*,
-    };
-
-    use super::{
-        Map, MapLookup, RenderingOrder,
-        fixture::{CountingKey, Events, count},
     };
 
     fn assert_map_contract<M>(actual: &M, arbitrary_iteration: bool)

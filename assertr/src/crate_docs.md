@@ -224,8 +224,62 @@ values seen. [`Patience`](crate::assertions::Patience) configures the timeout, t
 and the consistency duration. The defaults are fast (1 s, 10 ms, 100 ms). Set your own for a whole
 test suite with `Patience::set_global`, and override them for one assertion with `within`,
 `polling_every`, `for_at_least`, or `with_patience`. Use `eventually_ok` and `consistently_ok` for
-observations returning a `Result`. Eventual assertions need no particular runtime, and their futures
-are `Send` when the observation is.
+observations returning a `Result`. An observation still pending at the timeout fails the assertion
+instead of hanging it. Eventual assertions need no particular runtime, and their futures are `Send`
+when the observation is.
+
+### Browser elements (`thirtyfour`)
+
+Enable `thirtyfour` for assertions directly on a `thirtyfour::WebElement`. Enable `thirtyfour-cdp`
+for Chromium accessibility descriptions. These features accept existing sessions and do not select
+an HTTP client, TLS backend or browser manager. Configure those in your browser test harness.
+
+```
+# #[cfg(feature = "thirtyfour")]
+# async fn browser_example(element: &thirtyfour::WebElement) {
+use assertr::prelude::*;
+
+assert_that!(element)
+    .has_attribute("aria-label").await
+    .starts_with("Open")
+    .contains("menu");
+assert_that!(element).attribute("aria-controls").await.is_none();
+assert_that!(element).accessible_name().await.starts_with("Open");
+assert_that!(element).selected().await.is_true();
+# }
+```
+
+`has_attribute` asserts presence and continues on a `String`. An empty attribute is present.
+`attribute` and `property` instead continue on `Option<String>`. Text, computed accessibility,
+and boolean state reads also expose their values to existing assertions. Browser errors fail at
+the read call and are never converted to absence, empty strings, or false. Diagnostics keep the
+operation and remote element identity when a later value assertion fails.
+
+These panic-mode adapters detach before awaiting, so their futures are `Send` when the renderer
+is. Finish the returned ordinary assertion chain before another suspension. Capture callbacks
+remain synchronous: read first, then capture assertions on the value.
+
+Each extraction observes a snapshot. To wait, give the existing observation engine a fresh read:
+
+```
+# #[cfg(feature = "thirtyfour")]
+# async fn wait_example(element: &thirtyfour::WebElement) {
+use assertr::prelude::*;
+
+assert_that!(|| element.attr("aria-label"))
+    .eventually_ok()
+    .giving_up_on_any_error()
+    .satisfies(|attribute| {
+        attribute.is_some_satisfying(|value| { value.starts_with("Open"); });
+    }).await;
+# }
+```
+
+For a fixed element, `giving_up_on_any_error()` makes browser errors terminal, including stale
+handles. Resolving a replacement node belongs in the caller's locator policy. `consistently_ok`
+checks immediately for an explicit duration, without an initial settling period. Both engines
+also provide `try_matches` for fallible helpers. Additional typed reads are in
+`assertions::thirtyfour::read`; native reads remain available on `WebElement` itself.
 
 ## Custom assertions
 

@@ -1,21 +1,18 @@
+use alloc::vec::Vec;
+use core::marker::PhantomData;
+
 use super::entry::{explain_entry, record_entry};
-use crate::borrow_for::{BorrowFor, borrow_for};
 use crate::{
     __private::{Cons, Nil},
     AssertThat,
     assertions::map::{Entry, Map, MapLookup, entry},
-    expectation::AssertionContext,
-    expectation::Expectation,
-    expectation::lists::sealed as list_sealed,
-    failure::AssertionFailure,
-    failure::{FailureBuilder, FailureKind},
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation, lists::sealed as list_sealed},
+    failure::{AssertionFailure, FailureBuilder, FailureKind},
     matchers::{MatcherList, satisfying},
     mode::Capture,
-    renderer::DebugRenderer,
-    renderer::ValueRenderer,
+    renderer::{DebugRenderer, ValueRenderer},
 };
-use alloc::vec::Vec;
-use core::marker::PhantomData;
 
 pub(crate) mod sealed {
     pub trait Sealed {}

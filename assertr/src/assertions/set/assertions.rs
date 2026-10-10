@@ -1,5 +1,8 @@
 use super::{SetLookup, imp};
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use crate::{
+    AssertThat, Mode,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// The set relations: subset, superset, and disjointness.
 ///
@@ -67,8 +70,9 @@ where
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use alloc::collections::BTreeSet;
+
+        use crate::prelude::*;
 
         #[test]
         fn are_as_expected() {
@@ -84,8 +88,10 @@ mod tests {
     mod renderer_contract {
         use alloc::collections::BTreeSet;
 
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -100,8 +106,10 @@ mod tests {
     #[cfg(feature = "std")]
     mod set_types {
         use alloc::collections::BTreeSet;
-        use std::collections::{HashSet, hash_map::RandomState};
-        use std::hash::{BuildHasherDefault, DefaultHasher};
+        use std::{
+            collections::{HashSet, hash_map::RandomState},
+            hash::{BuildHasherDefault, DefaultHasher},
+        };
 
         use crate::prelude::*;
 
@@ -127,8 +135,9 @@ mod tests {
     mod is_subset_of {
         use alloc::collections::BTreeSet;
 
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -176,8 +185,9 @@ mod tests {
     mod is_superset_of {
         use alloc::collections::BTreeSet;
 
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -225,8 +235,9 @@ mod tests {
     mod is_disjoint_from {
         use alloc::collections::BTreeSet;
 
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

@@ -1,8 +1,12 @@
-use crate::assertions::std::mutex::{explain_acquired_lock, explain_held_lock};
-use crate::failure::FailureKind;
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use tokio::sync::Mutex;
+
+use crate::{
+    AssertThat, Mode,
+    assertions::std::mutex::{explain_acquired_lock, explain_held_lock},
+    expectation::{AssertionContext, Expectation},
+    failure::{FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Observes a locked Tokio mutex, retaining any acquired guard on rejection.
 #[derive(Debug, Clone, Copy)]
@@ -245,8 +249,9 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, M, R> for AssertThat<'_, Mutex<T>, M
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use tokio::sync::Mutex;
+
+        use crate::prelude::*;
 
         #[tokio::test]
         async fn are_as_expected() {
@@ -265,12 +270,14 @@ mod tests {
     }
 
     mod observations {
+        use core::cell::Cell;
+
+        use tokio::sync::Mutex;
+
         use super::super::{HasValueSatisfying, IsNotLocked};
         use crate::{
             matchers::all_of, prelude::*, renderer::RenderingBudget, test_support::NoRenderer,
         };
-        use core::cell::Cell;
-        use tokio::sync::Mutex;
 
         #[test]
         fn successful_acquisitions_are_released_between_siblings_without_a_renderer() {
@@ -325,9 +332,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
         use tokio::sync::Mutex;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {

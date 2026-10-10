@@ -31,9 +31,7 @@ use alloc::{format, string::String, vec::Vec};
 use core::fmt::{self, Display, Write};
 
 use crate::{
-    failure::AssertionFailure,
-    failure::Fact,
-    failure::{BANNER, PathSegment},
+    failure::{AssertionFailure, BANNER, Fact, PathSegment},
     renderer::Rendered,
 };
 
@@ -319,15 +317,17 @@ impl Write for Indented<'_> {
 
 #[cfg(test)]
 mod tests {
+    use super::body;
     use crate::prelude::*;
 
-    use super::body;
-
     mod child_locations {
-        use super::*;
-        use crate::failure::{Fact, FailureBuilder, FailureKind, PathSegment};
-        use crate::test_support::FailureReportAssertions;
         use indoc::formatdoc;
+
+        use super::*;
+        use crate::{
+            failure::{Fact, FailureBuilder, FailureKind, PathSegment},
+            test_support::FailureReportAssertions,
+        };
 
         #[test]
         fn index_and_key_facts_remain_evidence_with_and_without_paths() {

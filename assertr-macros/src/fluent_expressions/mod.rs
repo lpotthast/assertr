@@ -202,9 +202,10 @@ fn receiver_tokens(receiver: &Expr) -> TokenStream {
 
 #[cfg(test)]
 mod tests {
-    use super::*;
     use quote::quote;
     use renamed_assertr::prelude::*;
+
+    use super::*;
 
     #[test]
     fn rejects_out_of_line_modules() {

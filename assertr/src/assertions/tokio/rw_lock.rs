@@ -1,8 +1,12 @@
-use crate::assertions::std::mutex::locked_data;
-use crate::failure::{Fact, FailureKind};
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
 use tokio::sync::RwLock;
+
+use crate::{
+    AssertThat, Mode,
+    assertions::std::mutex::locked_data,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// The immediate acquisition state of a Tokio read-write lock.
 /// Acquired guards keep the observed value stable until the observation is consumed.
@@ -187,8 +191,9 @@ impl<T, M: Mode, R> TokioRwLockAssertions<T, R> for AssertThat<'_, RwLock<T>, M,
 mod tests {
     #[cfg(feature = "fluent")]
     mod fluent_aliases {
-        use crate::prelude::*;
         use tokio::sync::RwLock;
+
+        use crate::prelude::*;
 
         #[tokio::test]
         async fn are_as_expected() {
@@ -211,9 +216,10 @@ mod tests {
 
     use crate::prelude::*;
     mod observations {
+        use tokio::sync::RwLock;
+
         use super::super::{IsNotLocked, IsReadLocked, IsWriteLocked};
         use crate::{matchers::all_of, prelude::*};
-        use tokio::sync::RwLock;
 
         #[test]
         fn composed_checks_release_rejected_and_successful_guards_between_siblings() {
@@ -227,8 +233,9 @@ mod tests {
 
     use core::fmt;
 
-    use crate::renderer::ValueRenderer;
     use tokio::sync::RwLock;
+
+    use crate::renderer::ValueRenderer;
 
     struct WriteGuardCheckingRenderer<'a>(&'a RwLock<i32>);
 
@@ -242,9 +249,12 @@ mod tests {
     }
 
     mod renderer_contract {
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl};
         use tokio::sync::RwLock;
+
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, SENTINEL, SentinelRenderer, assert_trait_impl},
+        };
 
         struct Secret;
 
@@ -274,9 +284,10 @@ mod tests {
     }
 
     mod is_not_locked {
-        use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -347,8 +358,9 @@ mod tests {
     /// Synonym of `is_not_locked`. The fluent name and caller location are pinned here. The
     /// behavior is covered by that module.
     mod is_free {
-        use crate::prelude::*;
         use tokio::sync::RwLock;
+
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -359,10 +371,11 @@ mod tests {
     }
 
     mod is_read_locked {
-        use super::WriteGuardCheckingRenderer;
-        use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        use super::WriteGuardCheckingRenderer;
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -431,10 +444,11 @@ mod tests {
     }
 
     mod is_write_locked {
-        use super::WriteGuardCheckingRenderer;
-        use crate::prelude::*;
         use indoc::formatdoc;
         use tokio::sync::RwLock;
+
+        use super::WriteGuardCheckingRenderer;
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {

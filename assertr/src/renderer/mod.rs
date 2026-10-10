@@ -145,8 +145,7 @@ mod value;
 
 pub use budget::RenderingBudget;
 pub use context::RenderingContext;
+pub(crate) use context::omission;
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
 pub use rendered::{Rendered, RenderedBody};
 pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};
-
-pub(crate) use context::omission;

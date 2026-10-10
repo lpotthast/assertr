@@ -1,9 +1,9 @@
+use core::ops::Deref;
+
 use crate::{
-    expectation::AssertionContext,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
     failure::{FailureBuilder, FailureKind},
 };
-use core::ops::Deref;
 
 /// Explicitly dereferences an actual value before matching. No actual values are moved.
 #[derive(Debug, Clone)]
@@ -55,9 +55,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use alloc::{boxed::Box, rc::Rc, string::String};
+
     use super::dereferenced;
     use crate::{assertions::core::partial_eq::eq, prelude::*};
-    use alloc::{boxed::Box, rc::Rc, string::String};
 
     #[test]
     fn accepts_owned_references() {

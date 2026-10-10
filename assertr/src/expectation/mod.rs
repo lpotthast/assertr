@@ -25,12 +25,12 @@
 //!
 //! The [custom assertions guide](crate#custom-assertions) walks through a complete implementation.
 
+use alloc::vec::Vec;
+
 use crate::{
-    failure::AssertionFailure,
-    failure::{FailureBuilder, FailureKind},
+    failure::{AssertionFailure, FailureBuilder, FailureKind},
     renderer::DebugRenderer,
 };
-use alloc::vec::Vec;
 
 /// Declares the associated items of a transparent composition: no success observation, owned
 /// child [`Evidence`] as the rejection, and flattening into the receiving context.

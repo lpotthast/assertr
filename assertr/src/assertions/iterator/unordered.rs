@@ -1,16 +1,15 @@
+use alloc::boxed::Box;
+
 use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, Items, KnownLength, PhantomData,
     RenderingOrder, Scan, ValueRenderer, buffer_exactly, consumed_fact,
 };
-use alloc::boxed::Box;
-
 use crate::{
     assertions::collection::{
         ContainsExactlyInAnyOrder as CollectionContainsExactlyInAnyOrder, elements_are_in_any_order,
     },
     borrow_for::BorrowFor,
-    expectation::Evidence,
-    expectation::Expectation,
+    expectation::{Evidence, Expectation},
     failure::AssertionFailure,
     matchers::MatcherList,
 };
@@ -223,9 +222,10 @@ where
 
 #[cfg(test)]
 mod tests {
+    use core::cell::Cell;
+
     use super::*;
     use crate::prelude::*;
-    use core::cell::Cell;
 
     #[test]
     fn buffers_at_most_one_element_beyond_the_expected_length() {

@@ -8,15 +8,15 @@ mod execution;
 mod projection;
 mod rendering;
 
-#[cfg(feature = "std")]
-pub(crate) use detached::DetachedChain;
-
 use alloc::vec::Vec;
 use core::{
     cell::{Cell, RefCell},
     marker::PhantomData,
     panic::AssertUnwindSafe,
 };
+
+#[cfg(feature = "std")]
+pub(crate) use detached::DetachedChain;
 
 use crate::{
     AssertThat, ChainRecords, ChainState, Expression,
@@ -354,8 +354,9 @@ mod tests {
     }
 
     mod unwrap_inner {
-        use crate::prelude::*;
         use indoc::formatdoc;
+
+        use crate::prelude::*;
 
         #[test]
         fn panics_on_borrowed_value_in_panic_mode() {

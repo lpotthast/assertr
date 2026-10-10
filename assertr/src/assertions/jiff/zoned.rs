@@ -1,10 +1,13 @@
-use crate::borrow_for::{BorrowFor, borrow_for};
-use crate::failure::{Fact, FailureKind};
-use crate::mode::Mode;
-use crate::{AssertThat, renderer::DebugRenderer, renderer::ValueRenderer};
-use crate::{expectation::AssertionContext, expectation::Expectation, failure::FailureBuilder};
-use jiff::Zoned;
-use jiff::tz::TimeZone;
+use jiff::{Zoned, tz::TimeZone};
+
+use crate::{
+    AssertThat,
+    borrow_for::{BorrowFor, borrow_for},
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
+    mode::Mode,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Compares the observed time-zone rules with an expected [`TimeZone`].
 ///
@@ -179,8 +182,10 @@ impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
 
 #[cfg(test)]
 mod tests {
-    use jiff::Zoned;
-    use jiff::tz::{self, TimeZone};
+    use jiff::{
+        Zoned,
+        tz::{self, TimeZone},
+    };
 
     fn new_york() -> Zoned {
         "2024-06-19 15:22[America/New_York]".parse().expect("valid")
@@ -209,14 +214,16 @@ mod tests {
     }
 
     mod renderer_contract {
+        use jiff::{Zoned, tz::TimeZone};
+
         use super::{fixed_offset, new_york};
-        use crate::prelude::*;
-        use crate::test_support::{
-            CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
-            assert_redacted, assert_trait_impl,
+        use crate::{
+            prelude::*,
+            test_support::{
+                CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
+                assert_redacted, assert_trait_impl,
+            },
         };
-        use jiff::Zoned;
-        use jiff::tz::TimeZone;
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -258,10 +265,11 @@ mod tests {
     }
 
     mod is_in_time_zone {
-        use super::{fixed_offset, new_york};
-        use crate::prelude::*;
         use indoc::formatdoc;
         use jiff::tz::TimeZone;
+
+        use super::{fixed_offset, new_york};
+        use crate::prelude::*;
 
         #[test]
         fn caller_location_is_as_expected() {
@@ -309,9 +317,10 @@ mod tests {
     }
 
     mod is_in_time_zone_named {
+        use indoc::formatdoc;
+
         use super::{fixed_offset, new_york};
         use crate::prelude::*;
-        use indoc::formatdoc;
 
         #[test]
         fn caller_location_is_as_expected() {

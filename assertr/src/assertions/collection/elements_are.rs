@@ -1,14 +1,11 @@
-use crate::expectation::composite_items;
+use alloc::vec::Vec;
+
 use crate::{
     assertions::collection::{Placement, StableOrder},
-    expectation::AssertionContext,
-    expectation::Expectation,
-    expectation::{Evidence, context::unsatisfied},
-    failure::Fact,
-    failure::{FailureBuilder, FailureKind, PathSegment},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items, context::unsatisfied},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     matchers::MatcherList,
 };
-use alloc::vec::Vec;
 
 /// A sequence constraint requiring stable element order.
 #[derive(Debug, Clone)]
@@ -191,8 +188,9 @@ macro_rules! elements_are {
 
 #[cfg(test)]
 mod tests {
-    use crate::{matchers::eq, prelude::*};
     use core::{cell::Cell, fmt};
+
+    use crate::{matchers::eq, prelude::*};
 
     struct CountingRenderer<'a>(&'a Cell<usize>);
 

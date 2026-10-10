@@ -65,6 +65,8 @@ Everything beyond `std` and `num` is opt-in:
 | `serde`                                         | Both `serde-json` and `serde-toml`.                                                      |
 | `program`                                       | Checks that a program name or path resolves to an executable, like `which`.              |
 | `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name.                                    |
+| `thirtyfour`                                    | Async assertions on browser elements, extracting values for ordinary assertions.         |
+| `thirtyfour-cdp`                                | Chromium accessibility descriptions, in addition to `thirtyfour`.                        |
 | `full`                                          | All of the above.                                                                        |
 
 For `no_std`, disable the default features. `num`, `libm`, `partial`, `fluent`, `rootcause`, and

@@ -1,5 +1,7 @@
-use std::panic::{catch_unwind, set_hook, take_hook};
-use std::sync::mpsc;
+use std::{
+    panic::{catch_unwind, set_hook, take_hook},
+    sync::mpsc,
+};
 
 use assertr::prelude::*;
 

@@ -1,8 +1,11 @@
-use super::partial_eq::operand_expectation;
-use crate::borrow_for::BorrowFor;
 use core::cmp::Ordering;
 
-use crate::{AssertThat, Mode, renderer::DebugRenderer, renderer::ValueRenderer};
+use super::partial_eq::operand_expectation;
+use crate::{
+    AssertThat, Mode,
+    borrow_for::BorrowFor,
+    renderer::{DebugRenderer, ValueRenderer},
+};
 
 /// Generates one reusable ordering bound: the struct, its constructors, and its expectation.
 /// The bound accepts the listed [`Ordering`] results of `actual.partial_cmp(expected)`.
@@ -268,8 +271,10 @@ mod tests {
     mod renderer_contract {
         use core::{borrow::Borrow, cmp::Ordering, fmt};
 
-        use crate::prelude::*;
-        use crate::test_support::{NoRenderer, assert_trait_impl};
+        use crate::{
+            prelude::*,
+            test_support::{NoRenderer, assert_trait_impl},
+        };
 
         #[test]
         fn trait_is_implemented_without_renderer_support() {
@@ -331,8 +336,9 @@ mod tests {
     }
 
     mod diagnostics {
-        use crate::{prelude::*, test_support::FailureReportAssertions};
         use indoc::formatdoc;
+
+        use crate::{prelude::*, test_support::FailureReportAssertions};
 
         #[test]
         fn incomparable_values_fail_every_bound() {
