@@ -106,7 +106,7 @@
 //! # #[cfg(feature = "std")]
 //! assert_that!(|| panic!("boom"))
 //!     .panics()
-//!     .has_message()
+//!     .message()
 //!     .is_equal_to("boom");
 //! ```
 //!

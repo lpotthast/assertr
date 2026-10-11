@@ -188,7 +188,7 @@ mod tests {
                 assert_that!(duration).with_location(false).is_zero();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `duration`
@@ -225,7 +225,7 @@ mod tests {
                     .is_negative();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `SignedDuration::ZERO`
@@ -262,7 +262,7 @@ mod tests {
                     .is_positive();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `SignedDuration::from_secs(-5)`
@@ -404,7 +404,7 @@ mod tests {
                     .is_close_to(SignedDuration::MAX, SignedDuration::from_secs(1));
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `SignedDuration::ZERO`

@@ -77,7 +77,7 @@ mod tests {
             panic!("original panic");
         })
         .panics()
-        .has_type::<&str>()
+        .message()
         .is_equal_to("original panic");
     }
 

@@ -190,7 +190,7 @@ mod tests {
         ) -> AssertThat<'static, String, Panic> {
             assert_that_owned!(std::panic::catch_unwind(action))
                 .err()
-                .has_message()
+                .message()
         }
 
         #[test]

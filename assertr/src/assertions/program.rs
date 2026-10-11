@@ -215,7 +215,7 @@ mod tests {
                     .exists();
             })
             .panics()
-            .has_message()
+            .message()
             .contains(program.as_str())
             .contains("Reason: custom(CannotFindBinaryPath)");
             assert_that!(|| {
@@ -224,7 +224,7 @@ mod tests {
                     .resolved_path();
             })
             .panics()
-            .has_message()
+            .message()
             .contains(program.as_str())
             .contains("Reason: custom(CannotFindBinaryPath)");
             assert_that!(|| {
@@ -233,7 +233,7 @@ mod tests {
                     .resolved_path();
             })
             .panics()
-            .has_message()
+            .message()
             .contains("Actual: <redacted>")
             .contains("Reason: <redacted>");
         }
@@ -278,7 +278,7 @@ mod tests {
                     .exists()
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `Program::from("someNonexistentProgram")`

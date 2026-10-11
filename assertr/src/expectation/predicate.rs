@@ -167,7 +167,7 @@ mod tests {
             assert_that!(1).matches(predicate(|_: &i32| panic!("user panic")));
         })
         .panics()
-        .has_type::<&str>()
+        .message()
         .is_equal_to("user panic");
     }
 }

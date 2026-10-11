@@ -232,7 +232,7 @@ mod tests {
                     .has_remaining_count(3);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2].into_iter()`
@@ -274,7 +274,7 @@ mod tests {
                     .has_no_remaining_elements();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2].into_iter()`
@@ -316,7 +316,7 @@ mod tests {
                     .has_remaining_elements();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1_i32; 0].into_iter()`

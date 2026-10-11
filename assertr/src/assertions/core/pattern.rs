@@ -405,7 +405,7 @@ mod tests {
                 .is_matching(pattern!(Err(TestError::MissingQueryParams)));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `Result::<(), TestError>::Err(TestError::MissingTokenQueryParam)`
@@ -459,7 +459,7 @@ mod tests {
                     .is_not_matching(pattern!(Err(TestError::MissingQueryParams)));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `Result::<(), TestError>::Err(TestError::MissingQueryParams)`

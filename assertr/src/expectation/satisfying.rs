@@ -163,7 +163,7 @@ mod tests {
             assert_that!(1).matches(satisfying(|_| {}));
         })
         .panics()
-        .has_type::<&str>()
+        .message()
         .contains("performed no assertions");
     }
 
@@ -176,7 +176,7 @@ mod tests {
             }));
         })
         .panics()
-        .has_type::<&str>()
+        .message()
         .is_equal_to("callback panic");
     }
 

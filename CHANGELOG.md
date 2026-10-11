@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [0.8.0] - 2026-10-10
+## [0.8.0] - 2026-10-12
 
 ### Added
 
@@ -54,11 +54,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `last` for `StableOrder` collections, and `at` for `RandomAccess` collections.
 - `BinaryHeap` supports length and order-free collection assertions.
 - Collection, set, and map assertions work on `&mut` subjects, such as `assert_that_owned!(&mut vec)`.
-- `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `has_type`, and `has_type_ref`, for
+- `Box<dyn Any + Send>` and `Box<dyn Any + Send + Sync>` support `is_of_type`, `downcast`, and `downcast_ref`, for
   example on payloads from `catch_unwind` or `JoinHandle::join`. Box and panic-payload `is_of_type` checks preserve
   the subject and work in panic and capture mode.
-- `has_message` continues with the message of a panic payload, whether `panic!` raised a `&str` or a `String`, so a
-  message check no longer depends on how the panic was formatted: `assert_that!(|| ..).panics().has_message()`. It
+- `message` continues with the message of a panic payload, whether `panic!` raised a `&str` or a `String`, so a
+  message check no longer depends on how the panic was formatted: `assert_that!(|| ..).panics().message()`. It
   works on `PanicValue` and boxed `dyn Any` payloads, and `matchers::HasPanicMessage` performs the same check in any
   mode.
 - `RefCellAssertions::is_not_borrowed` and `matchers::cell::IsNotBorrowed` check that a cell has no active borrow.
@@ -145,10 +145,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** Removed `From<&T> for Actual`, which made `Actual::from` ambiguous for reference values. Use
   `Actual::Borrowed`.
 - **Breaking:** Renamed `Type::get_type_name` to `Type::type_name`.
-- **Breaking:** Extracting assertions no longer use a `get_` prefix. Renamed `get_some`, `get_ok`, `get_err`,
-  `get_ready`, and `get_ascii` to `some`, `ok`, `err`, `ready`, and `ascii`, and the reqwest response extractions
-  `get_header`, `get_text`, and `get_json` to `header`, `text`, and `json`. Checks keep their `is_` prefix, so
-  `is_some` checks the variant and `some` extracts its value.
+- **Breaking:** Extracting assertions are named after the value they continue with, without a `get_` or `has_` prefix.
+  Renamed `get_some`, `get_ok`, `get_err`, `get_ready`, and `get_ascii` to `some`, `ok`, `err`, `ready`, and `ascii`,
+  the reqwest response extractions `get_header`, `get_text`, and `get_json` to `header`, `text`, and `json`, the box
+  and panic-payload extractions `has_type` and `has_type_ref` to `downcast` and `downcast_ref`, and rootcause
+  `has_current_context` to `current_context`. Checks keep their prefix, so `is_some` checks the variant and `some`
+  extracts its value, and `is_of_type` checks the payload type and `downcast` extracts the payload.
 - **Breaking:** Renamed `is_blank_ascii` and its fluent alias `be_blank_ascii` to `is_ascii_blank` and `be_ascii_blank`,
   matching the `is_ascii_*` character assertions.
 - **Breaking:** Removed `AssertrCondition`, `ConditionAssertions`, `IterableConditionAssertions`, and their `is`,
@@ -241,9 +243,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - **Breaking:** `as_json()` and `as_toml()` return owned `Result` subjects that preserve serialization errors, and the
   `json()` and `toml()` adapters are removed. Replace string chains with `.as_json().ok()` in panic mode or
   `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
-- **Breaking:** `has_type` and `has_type_ref` move from `BoxAssertions` and `PanicValueAssertions` to
-  `BoxExtractAssertions`, which covers boxed `dyn Any` payloads and `PanicValue`. `BoxAssertions` keeps the
-  non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import `BoxExtractAssertions` or use the prelude.
+- **Breaking:** Payload extraction (`downcast` and `downcast_ref`) moves from `BoxAssertions` and
+  `PanicValueAssertions` to `BoxExtractAssertions`, which covers boxed `dyn Any` payloads and `PanicValue`.
+  `BoxAssertions` keeps the non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import `BoxExtractAssertions` or use the prelude.
 - **Breaking:** `RootcauseReportAssertions`, `RootcauseDynamicReportAssertions`, and
   `RootcauseDynamicReportExtractAssertions` cover both `Report` and `ReportRef` subjects. Replace imports of
   `RootcauseReportRefAssertions`, `RootcauseDynamicReportRefAssertions`, and

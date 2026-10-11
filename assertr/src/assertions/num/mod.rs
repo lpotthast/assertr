@@ -463,7 +463,7 @@ mod tests {
         fn panics_when_not_zero() {
             assert_that!(|| assert_that!(3).with_location(false).is_zero())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `3`
@@ -529,7 +529,7 @@ mod tests {
             assert_that!(failures).has_length(1);
             assert_that!(|| assert_that!(0.0).with_location(false).is_negative())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `0.0`
@@ -590,7 +590,7 @@ mod tests {
         fn panics_for_a_clear_sign_bit() {
             assert_that!(|| assert_that!(0.0).with_location(false).is_sign_negative())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `0.0`
@@ -662,7 +662,7 @@ mod tests {
                     .is_close_to(0.333, 0.001)
             })
             .panics()
-            .has_message()
+            .message()
             .contains("is not close to")
             .contains("Allowed deviation: 0.001");
         }
@@ -733,7 +733,7 @@ mod tests {
         fn panics_when_not_nan() {
             assert_that!(|| assert_that!(1.23).with_location(false).is_nan())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `1.23`
@@ -766,7 +766,7 @@ mod tests {
                 assert_that!(f32::INFINITY).with_location(false).is_finite();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `f32::INFINITY`

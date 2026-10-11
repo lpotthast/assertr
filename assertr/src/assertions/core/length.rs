@@ -233,7 +233,7 @@ mod tests {
         fn panics_when_not_empty() {
             assert_that!(|| assert_that!([1, 2, 3]).with_location(false).is_empty())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3]`
@@ -295,7 +295,7 @@ mod tests {
                     .has_length(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `[42].as_slice()`
@@ -388,11 +388,11 @@ mod tests {
         fn ranges_reject_lengths_that_exceed_usize() {
             assert_that!(|| assert_that!(0_usize..=usize::MAX).has_length(0))
                 .panics()
-                .has_type::<&str>()
+                .message()
                 .is_equal_to("range length exceeds usize::MAX");
             assert_that!(|| assert_that!(i64::MIN..=i64::MAX).has_length(0))
                 .panics()
-                .has_type::<&str>()
+                .message()
                 .is_equal_to("range length exceeds usize::MAX");
         }
     }

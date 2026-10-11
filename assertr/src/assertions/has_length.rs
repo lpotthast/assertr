@@ -287,7 +287,7 @@ mod tests {
     fn unrepresentable_range_lengths_panic() {
         assert_that!(|| (0..u128::MAX).length())
             .panics()
-            .has_type::<&str>()
+            .message()
             .is_equal_to("range length exceeds usize::MAX");
     }
 }

@@ -159,7 +159,7 @@ pub trait RootcauseDynamicReportExtractAssertions<'t, R = DebugRenderer> {
     /// `AssertThat<E>` borrowing it.
     ///
     /// A type mismatch becomes a formatted assertion failure.
-    fn has_current_context<E: 'static>(&'t self) -> AssertThat<'t, E, Panic, R>
+    fn current_context<E: 'static>(&'t self) -> AssertThat<'t, E, Panic, R>
     where
         R: Clone;
 }
@@ -506,7 +506,7 @@ macro_rules! report_impls {
             for AssertThat<'t, rootcause::$report<$($lt,)? Dynamic, O, T>, Panic, R>
         {
             #[track_caller]
-            fn has_current_context<E: 'static>(&'t self) -> AssertThat<'t, E, Panic, R>
+            fn current_context<E: 'static>(&'t self) -> AssertThat<'t, E, Panic, R>
             where
                 R: Clone,
             {
@@ -611,7 +611,6 @@ mod tests {
                 .have_current_context_satisfying::<&'static str, _>(|context| {
                     context.is_equal_to("root");
                 });
-            report.must().have_current_context::<&'static str>();
         }
     }
 
@@ -784,7 +783,7 @@ mod tests {
                     .has_current_context_type::<String>();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -832,7 +831,7 @@ mod tests {
                     .has_current_context_display_value("other");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -887,7 +886,7 @@ mod tests {
                     .has_current_context_debug_string("other");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `report!(TestError("root"))`
@@ -955,17 +954,14 @@ mod tests {
         }
     }
 
-    mod has_current_context {
+    mod current_context {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
             let report = report!("root");
-            assert_caller_location!(assert_that!(report), has_current_context::<String>());
-            assert_caller_location!(
-                assert_that!(report.as_ref()),
-                has_current_context::<String>()
-            );
+            assert_caller_location!(assert_that!(report), current_context::<String>());
+            assert_caller_location!(assert_that!(report.as_ref()), current_context::<String>());
         }
 
         #[test]
@@ -973,10 +969,10 @@ mod tests {
             let report = report!("root");
             let report_ref = report.as_ref();
             assert_that!(report_ref)
-                .has_current_context::<&'static str>()
+                .current_context::<&'static str>()
                 .is_equal_to("root");
             assert_that!(report)
-                .has_current_context::<&'static str>()
+                .current_context::<&'static str>()
                 .is_equal_to("root");
         }
 
@@ -985,10 +981,10 @@ mod tests {
             assert_that!(|| {
                 assert_that!(report!("root"))
                     .with_location(false)
-                    .has_current_context::<String>();
+                    .current_context::<String>();
             })
             .panics()
-            .has_message()
+            .message()
             // `has_current_context_type` pins the exact report of this shared explanation.
             .contains("Actual: &str")
             .contains("is not the expected current context type");

@@ -1081,7 +1081,7 @@ mod tests {
                     .ends_with([1, 2, 3]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `vec![9, 3]`

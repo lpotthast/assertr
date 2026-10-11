@@ -233,7 +233,7 @@ mod tests {
         fn takes_ownership_for_consuming_assertions() {
             assert_that_owned!(|| panic!("boom"))
                 .panics()
-                .has_type::<&str>()
+                .message()
                 .is_equal_to("boom");
         }
 

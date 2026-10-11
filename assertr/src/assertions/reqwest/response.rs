@@ -1155,7 +1155,7 @@ mod tests {
                                 .await;
                         });
                     }).panics()
-                    .has_message()
+                    .message()
                 };
             }
             body_panic!(failing_response(), CustomValueRenderer, text)
@@ -1215,7 +1215,7 @@ mod tests {
                     .has_status_code(reqwest::StatusCode::OK);
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(404, &[], "")`
@@ -1387,7 +1387,7 @@ mod tests {
                     .has_header("content-type");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(200, &[("x-api-key", "1234")], "")`
@@ -1595,7 +1595,7 @@ mod tests {
                     .has_header_value("content-type", "application/json");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `response(200, &[], "")`
@@ -1638,7 +1638,7 @@ mod tests {
                 assert_that!(ok_response()).header("content type");
             })
             .panics()
-            .has_message()
+            .message()
             .contains("was given an invalid header name");
         }
 
@@ -1664,7 +1664,7 @@ mod tests {
                     });
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expected: "nope"
@@ -1716,7 +1716,7 @@ mod tests {
                 let response = ok_response();
                 drop(assert_that!(response).text());
             }).panics()
-            .has_type::<&str>()
+            .message()
             .is_equal_to(
                 "text() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
             );
@@ -1733,7 +1733,7 @@ mod tests {
                 });
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `failing_response()`
@@ -1823,7 +1823,7 @@ mod tests {
                 block_on(assert_that_owned!(json_response("0")).json::<Decoded>());
             })
             .panics()
-            .has_message()
+            .message()
             .contains("rejected zero");
             assert_that!(CALLS.load(Ordering::Relaxed)).is_equal_to(2);
         }
@@ -1842,7 +1842,7 @@ mod tests {
                 });
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expression: `json_response(body)`
@@ -1865,7 +1865,7 @@ mod tests {
                 let response = json_response(r#"{"name":"Bob","age":42}"#);
                 drop(assert_that!(response).json::<Person>());
             }).panics()
-            .has_type::<&str>()
+            .message()
             .is_equal_to(
                 "json() consumes the response and can only be called on an owned Response! Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.",
             );

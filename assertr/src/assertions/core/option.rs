@@ -248,7 +248,7 @@ mod tests {
                     .is_some()
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `Option::<i32>::None`
@@ -367,7 +367,7 @@ mod tests {
                     .is_none()
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `Option::<i32>::Some(42)`

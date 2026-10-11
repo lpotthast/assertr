@@ -749,7 +749,7 @@ mod tests {
     fn panic_message(action: impl FnOnce() + UnwindSafe) -> AssertThat<'static, String, Panic> {
         assert_that_owned!(std::panic::catch_unwind(action))
             .err()
-            .has_message()
+            .message()
     }
 
     fn counting(

@@ -387,7 +387,7 @@ mod tests {
             let mutex = Mutex::new(42);
             assert_that!(|| assert_that!(mutex).with_location(false).is_locked())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `mutex`
@@ -427,7 +427,7 @@ mod tests {
             let guard = mutex.lock().await;
             assert_that!(|| assert_that!(&mutex).with_location(false).is_not_locked())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `&mutex`
@@ -509,7 +509,7 @@ mod tests {
                     });
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expected: 43

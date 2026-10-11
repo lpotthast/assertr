@@ -247,7 +247,7 @@ mod tests {
                 assert_that!(map).with_location(false).keys().contains("c");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Actual: {{

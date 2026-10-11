@@ -427,7 +427,7 @@ mod tests {
                     .contains(4);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].as_slice()`
@@ -505,7 +505,7 @@ mod tests {
                     .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].as_slice()`
@@ -591,7 +591,7 @@ mod tests {
                     .contains_all([1, 42]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2].as_slice()`
@@ -640,7 +640,7 @@ mod tests {
                     .does_not_contain(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].as_slice()`
@@ -686,7 +686,7 @@ mod tests {
                     .does_not_contain_matching(crate::assertions::core::partial_ord::ge(5));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[-1, 7, 12].as_slice()`
@@ -756,7 +756,7 @@ mod tests {
                     .contains_exactly_in_any_order([1, 1]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Elements not found");
         }
 
@@ -768,7 +768,7 @@ mod tests {
                     .contains_exactly_in_any_order([2, 3, 4]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].as_slice()`
@@ -940,7 +940,7 @@ mod tests {
                     .contains_exactly_in_any_order_matching(predicates.map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1].as_slice()`
@@ -982,7 +982,7 @@ mod tests {
                     );
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].as_slice()`

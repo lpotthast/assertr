@@ -256,7 +256,7 @@ mod tests {
                     .is_ready();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `Poll::<Foo>::Pending`
@@ -358,7 +358,7 @@ mod tests {
                     .is_pending();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `Poll::Ready(Foo {{ val: 42 }})`

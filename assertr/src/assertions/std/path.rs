@@ -1017,7 +1017,7 @@ mod tests {
             let path = Path::new("src/assertions/std/some-non-existing-file.rs");
             assert_that!(|| assert_that!(path).with_location(false).exists())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `path`
@@ -1073,7 +1073,7 @@ mod tests {
                 assert_that!(path).with_location(false).does_not_exist();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `path`
@@ -1095,7 +1095,7 @@ mod tests {
                 assert_that!(path).with_location(false).does_not_exist();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1132,7 +1132,7 @@ mod tests {
             let dir = path.parent().unwrap();
             assert_that!(|| assert_that!(dir).with_location(false).is_a_file())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(indoc::formatdoc! {r"
                     -------- assertr --------
                     Expression: `dir`
@@ -1203,7 +1203,7 @@ mod tests {
             let path = Path::new("foo/bar/baz.rs");
             assert_that!(|| assert_that!(path).with_location(false).has_a_root())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `path`
@@ -1281,7 +1281,7 @@ mod tests {
                     .has_file_name("some.json")
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1337,7 +1337,7 @@ mod tests {
             let path = Path::new("/");
             assert_that!(|| assert_that!(path).with_location(false).has_extension("rs"))
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`
@@ -1379,7 +1379,7 @@ mod tests {
                     .starts_with("assert")
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `path`

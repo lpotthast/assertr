@@ -648,7 +648,7 @@ mod tests {
                 }
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`

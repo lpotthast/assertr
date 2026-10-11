@@ -146,7 +146,7 @@ mod tests {
                     .with_location(false)
                     .needs_drop();
             }).panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `assertr::assertions::core::mem::tests::needs_drop::panics_when_type_does_not_need_drop::DoesNotNe...`

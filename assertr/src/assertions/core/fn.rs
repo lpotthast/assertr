@@ -363,7 +363,7 @@ mod tests {
             fn succeeds_when_panic_occurs() {
                 assert_that!(|| unimplemented!())
                     .panics()
-                    .has_message()
+                    .message()
                     .is_equal_to("not implemented");
             }
 
@@ -379,7 +379,7 @@ mod tests {
 
                 assert_that!(|| PanicsOnDrop)
                     .panics()
-                    .has_message()
+                    .message()
                     .is_equal_to("output drop");
             }
 
@@ -389,10 +389,10 @@ mod tests {
                     assert_that!(|| panic!("boom"))
                         .with_location(false)
                         .panics()
-                        .has_type::<String>();
+                        .downcast::<String>();
                 })
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `|| panic!("boom")`
@@ -411,15 +411,15 @@ mod tests {
                 const HINT: &str = "The function returned a future, which is never polled. Use `panics_async` to run it.";
                 assert_that!(|| assert_that!(async || panic!("never runs")).panics())
                     .panics()
-                    .has_type::<String>()
+                    .message()
                     .contains(HINT);
                 assert_that!(|| assert_that!(|| async { panic!("never runs") }).panics())
                     .panics()
-                    .has_type::<String>()
+                    .message()
                     .contains(HINT);
                 assert_that!(|| assert_that!(|| 42).panics())
                     .panics()
-                    .has_type::<String>()
+                    .message()
                     .does_not_contain(HINT);
             }
 
@@ -427,7 +427,7 @@ mod tests {
             fn panics_when_no_panic_occurs() {
                 assert_that!(|| assert_that!(|| 42).with_location(false).panics())
                     .panics()
-                    .has_type::<String>()
+                    .message()
                     .is_equal_to(formatdoc! {r"
                         -------- assertr --------
                         Expression: `|| 42`
@@ -467,7 +467,7 @@ mod tests {
                         .with_location(false)
                         .does_not_panic();
                     }).panics()
-                    .has_type::<String>()
+                    .message()
                     .is_equal_to(formatdoc! {r#"
                         -------- assertr --------
                         Expression: `|| if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
@@ -488,7 +488,7 @@ mod tests {
                         .with_location(false)
                         .does_not_panic();
                     }).panics()
-                    .has_type::<String>()
+                    .message()
                     .is_equal_to(formatdoc! {r"
                         -------- assertr --------
                         Expression: `|| if owned {{ std::panic::panic_any(message.to_owned()); }} else...`
@@ -544,7 +544,7 @@ mod tests {
                         .is_equal_to("expected");
                 })
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `|| "actual"`
@@ -616,7 +616,7 @@ mod tests {
                         assert_that!(invocations.get()).is_equal_to(0);
                         let result = pending.await;
                         assert_that!(result.state.records.assertion_count()).is_equal_to(1);
-                        result.has_type::<&str>().is_equal_to("poll panic");
+                        result.message().is_equal_to("poll panic");
                     } else {
                         let pending = child.does_not_panic_async();
                         assert_that!(root.state.records.assertion_count()).is_equal_to(0);
@@ -626,7 +626,7 @@ mod tests {
                         })
                         .panics_async()
                         .await
-                        .has_type::<String>()
+                        .message()
                         .contains("unexpectedly panicked");
                         assert_that!(root.state.records.assertion_count()).is_equal_to(1);
                     }
@@ -650,7 +650,7 @@ mod tests {
                 assert_that!(async || unimplemented!())
                     .panics_async()
                     .await
-                    .has_message()
+                    .message()
                     .is_equal_to("not implemented");
             }
 
@@ -662,7 +662,7 @@ mod tests {
                 })
                 .panics_async()
                 .await
-                .has_message()
+                .message()
                 .is_equal_to("boom");
             }
 
@@ -671,7 +671,7 @@ mod tests {
                 assert_that!(|| -> core::future::Ready<()> { panic!("before future") })
                     .panics_async()
                     .await
-                    .has_message()
+                    .message()
                     .is_equal_to("before future");
             }
 
@@ -688,7 +688,7 @@ mod tests {
                 assert_that!(async || PanicsOnDrop)
                     .panics_async()
                     .await
-                    .has_message()
+                    .message()
                     .is_equal_to("output drop");
             }
 
@@ -697,7 +697,7 @@ mod tests {
                 assert_that!(async || { assert_that!(async || 42).panics_async().await })
                     .panics_async()
                     .await
-                    .has_type::<String>()
+                    .message()
                     .contains("did not panic");
             }
 
@@ -707,11 +707,11 @@ mod tests {
                     assert_that!(async || panic!("boom"))
                         .panics_async()
                         .await
-                        .has_type::<String>();
+                        .downcast::<String>();
                 })
                 .panics_async()
                 .await
-                .has_type::<String>()
+                .message()
                 .contains("is not of the expected type");
             }
         }
@@ -745,7 +745,7 @@ mod tests {
                     })
                     .panics_async()
                     .await
-                    .has_type::<String>()
+                    .message()
                     .contains(r#"Panic message: custom("private-async-panic-value")"#);
                     assert_that!(async || {
                         assert_that!(async || panic())
@@ -755,7 +755,7 @@ mod tests {
                     })
                     .panics_async()
                     .await
-                    .has_type::<String>()
+                    .message()
                     .contains("Panic message: <redacted>");
                 }
             }
@@ -786,7 +786,7 @@ mod tests {
                 })
                 .panics_async()
                 .await
-                .has_type::<String>()
+                .message()
                 .contains(r#"Expected: "expected""#);
             }
 
@@ -799,7 +799,7 @@ mod tests {
                 })
                 .panics_async()
                 .await
-                .has_type::<String>()
+                .message()
                 .contains(r#"Panic message: "before future""#);
             }
         }

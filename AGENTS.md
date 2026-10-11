@@ -28,6 +28,8 @@ fit.
 ## Testing
 
 - Write test assertions using assertr.
+- Check panic messages with `.panics().message()`, not by downcasting the payload to `String` or `&str`. Downcast
+  only when the payload type itself is under test.
 - Put unit tests besides the tested production code.
 - Group tests belonging together into focused submodules.
 
@@ -70,9 +72,12 @@ fit.
 - Put behavior, exact diagnostic tests, and built-in adapter tests beside the generic family that owns them. Keep
   downstream-implementor and `no_std` coverage in existing integration fixtures instead of duplicating every assertion
   across every adapter. Pin each failure shape's exact report once, not again per mode or per delegating method.
-- Prefer natural assertion names. Type-changing assertions do not use a `get_` prefix. Keep checking and extracting
-  behavior distinguishable, for example `is_some` checks and `some` extracts, and `is_of_type` checks and `has_type`
-  extracts.
+- Prefer natural assertion names. Name type-changing assertions after the value they continue with, without a `get_`
+  or `has_` prefix, for example `some`, `first`, `message`, or `downcast` (std's term). Checks are predicate phrases
+  such as `is_*`, `contains_*`, or `has_*(expected)`, so a `has_*` method takes an expected value and never extracts.
+  Observation verbs that run the subject, such as `panics` and `does_not_panic`, may continue with what they observed.
+  Keep checking and extracting behavior distinguishable, for example `is_some` checks and `some` extracts, and
+  `is_of_type` checks and `downcast` extracts.
 - Shape public `*Assertions` traits as `<'t, subject parameters, M: Mode, R = DebugRenderer>`, declaring each parameter
   only when a signature uses it.
 - New assertion traits use `#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]`. Follow

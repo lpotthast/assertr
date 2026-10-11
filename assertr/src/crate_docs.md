@@ -158,7 +158,7 @@ assert_that!(async || 7_u32)
     .is_equal_to(7);
 assert_that!(async || panic!("boom"))
     .panics_async().await
-    .has_message()
+    .message()
     .is_equal_to("boom");
 # });
 # }

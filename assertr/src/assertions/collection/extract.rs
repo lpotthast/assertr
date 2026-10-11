@@ -128,7 +128,7 @@ mod tests {
                     .single();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Actual length: custom(2)");
         }
     }
@@ -170,7 +170,7 @@ mod tests {
                     .single();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Actual: HashSet {\n    1,\n    2,\n    3,\n}");
         }
 
@@ -180,7 +180,7 @@ mod tests {
                 assert_that!(vec![1, 2]).with_location(false).single();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `vec![1, 2]`

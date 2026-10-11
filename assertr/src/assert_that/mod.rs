@@ -351,7 +351,7 @@ mod tests {
                 panic!("closure panic");
             })
             .panics()
-            .has_type::<&str>()
+            .message()
             .is_equal_to("closure panic");
             assert_that!(value).is_equal_to(1);
 
@@ -373,7 +373,7 @@ mod tests {
             })
             .panics_async()
             .await
-            .has_type::<&str>()
+            .message()
             .is_equal_to("async closure panic");
             assert_that!(value).is_equal_to(1);
         }
@@ -388,7 +388,7 @@ mod tests {
             let assert = assert_that!(&value).with_location(false).is_equal_to("foo");
 
             assert_that!(move || assert.unwrap_inner()).panics()
-                .has_type::<&str>()
+                .message()
                 .is_equal_to("Cannot unwrap a borrowed value. Create the assertion with `assert_that_owned!(...)` (or `.must_owned()`) instead.");
         }
 

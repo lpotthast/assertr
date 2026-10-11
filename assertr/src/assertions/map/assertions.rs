@@ -523,7 +523,7 @@ mod tests {
                 assert_that!(map).with_location(false).contains_key("baz");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -567,7 +567,7 @@ mod tests {
                     .does_not_contain_key("foo");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -616,7 +616,7 @@ mod tests {
                 assert_that!(map).with_location(false).contains_value("baz");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -751,7 +751,7 @@ mod tests {
                     .does_not_contain_value("bar");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -804,7 +804,7 @@ mod tests {
                     .contains_entry("baz", "someValue");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -829,7 +829,7 @@ mod tests {
                     .contains_entry("foo", "someValue");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -871,7 +871,7 @@ mod tests {
                     .contains_entry_matching("b", eq(1));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -897,7 +897,7 @@ mod tests {
                     .contains_entry_matching("a", eq(2));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -976,7 +976,7 @@ mod tests {
                     .does_not_contain_entry("foo", "bar");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`
@@ -1023,7 +1023,7 @@ mod tests {
                     .contains_keys(["foo", "baz"]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `map`

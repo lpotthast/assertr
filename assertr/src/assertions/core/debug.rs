@@ -340,7 +340,7 @@ mod tests {
                     .has_debug_string("foo")
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `42`
@@ -435,7 +435,7 @@ mod tests {
                         .has_debug_value(r"\n")
                 })
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `"\n"`

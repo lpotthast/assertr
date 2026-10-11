@@ -716,7 +716,7 @@ mod tests {
                     .contains(4);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -773,7 +773,7 @@ mod tests {
                     .contains_all([2, 4]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `vec![1, 2, 3].into_iter()`
@@ -822,7 +822,7 @@ mod tests {
                     .contains_matching(matchers::predicate(|it: &i32| *it > 7));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -940,7 +940,7 @@ mod tests {
                     .starts_with_matching([is_one, is_nine].map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1005,7 +1005,7 @@ mod tests {
                     .ends_with([2, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -1064,7 +1064,7 @@ mod tests {
                     .ends_with_matching([is_two, is_nine].map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1133,7 +1133,7 @@ mod tests {
                     .contains_contiguous([2, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -1187,7 +1187,7 @@ mod tests {
                     .contains_contiguous_matching([is_two, is_nine].map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1292,7 +1292,7 @@ mod tests {
                     .does_not_contain(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -1335,7 +1335,7 @@ mod tests {
                     .does_not_contain_matching(matchers::predicate(|it: &i32| *it % 2 == 0));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1405,7 +1405,7 @@ mod tests {
                     .contains_exactly([1, 2]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -1460,7 +1460,7 @@ mod tests {
                     );
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1491,7 +1491,7 @@ mod tests {
                     );
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter().filter(|_| true)`
@@ -1552,7 +1552,7 @@ mod tests {
                     .contains_exactly_in_any_order([2, 1]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `(1..).filter(|_| true)`
@@ -1587,7 +1587,7 @@ mod tests {
                     .contains_exactly_in_any_order([1, 2, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`
@@ -1675,7 +1675,7 @@ mod tests {
                     );
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].into_iter()`
@@ -1776,7 +1776,7 @@ mod tests {
                     .is_exhausted();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2].into_iter()`
@@ -1820,7 +1820,7 @@ mod tests {
                     .is_not_exhausted();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `core::iter::empty::<i32>()`
@@ -1864,7 +1864,7 @@ mod tests {
                     .has_count(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].iter().filter(|it| **it > 0)`
@@ -1893,7 +1893,7 @@ mod tests {
                     .has_count(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                     -------- assertr --------
                     Expression: `[1, 2, 3].into_iter()`

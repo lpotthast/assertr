@@ -49,10 +49,7 @@ mod tests {
     use crate::prelude::*;
 
     fn assert_string_panic_contains(panic: std::thread::Result<()>, expected: &str) {
-        assert_that_owned!(panic)
-            .err()
-            .has_type::<String>()
-            .contains(expected);
+        assert_that_owned!(panic).err().message().contains(expected);
     }
 
     #[test]

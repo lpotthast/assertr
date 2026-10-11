@@ -319,7 +319,7 @@ mod tests {
 
             assert_that!(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&rw_lock`
@@ -345,7 +345,7 @@ mod tests {
 
             assert_that!(|| assert_that!(&rw_lock).with_location(false).is_not_locked())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&rw_lock`
@@ -426,7 +426,7 @@ mod tests {
 
             assert_that!(|| assert_that!(rw_lock).with_location(false).is_read_locked())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `rw_lock`

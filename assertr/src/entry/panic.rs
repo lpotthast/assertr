@@ -6,7 +6,7 @@ use core::any::Any;
 /// Only the `panics` and `panics_async` function assertions create this subject, and they require
 /// the `std` feature. Without `std`, the type exists but no value of it can be produced. Its
 /// payload is type-erased, like the `Box<dyn Any + Send>` returned by `std::panic::catch_unwind`.
-/// Use [`has_message`](crate::assertions::BoxExtractAssertions::has_message) to check the message
+/// Use [`message`](crate::assertions::BoxExtractAssertions::message) to continue with the message
 /// of a `&str` or `String` payload, whichever `panic!` produced. Use the other
 /// [`BoxExtractAssertions`](crate::assertions::BoxExtractAssertions) and
 /// [`BoxAssertions`](crate::assertions::BoxAssertions) methods to inspect payloads of other types.
@@ -15,7 +15,7 @@ use core::any::Any;
 /// use assertr::prelude::*;
 ///
 /// # #[cfg(feature = "std")]
-/// assert_that!(|| panic!("boom")).panics().has_message().is_equal_to("boom");
+/// assert_that!(|| panic!("boom")).panics().message().is_equal_to("boom");
 /// ```
 pub struct PanicValue(pub(crate) Box<dyn Any + Send>);
 

@@ -211,7 +211,7 @@ mod tests {
                     .is_equal_to_ignoring_ascii_case('B')
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `'a'`
@@ -245,7 +245,7 @@ mod tests {
         fn panics_when_not_lowercase() {
             assert_that!(|| assert_that!('A').with_location(false).is_lowercase())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `'A'`

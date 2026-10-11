@@ -571,7 +571,7 @@ mod tests {
                 assert_that!("a").with_location(false).is_blank();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `"a"`
@@ -652,7 +652,7 @@ mod tests {
                     .is_equal_to_ignoring_ascii_case("STRAẞE");
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("ignoring ASCII case");
         }
     }

@@ -182,7 +182,7 @@ mod tests {
                     .is_subset_of(BTreeSet::<&str>::new());
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `BTreeSet::from(["bar"])`
@@ -232,7 +232,7 @@ mod tests {
                     .is_superset_of(BTreeSet::from(["bar"]));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `BTreeSet::<&str>::new()`
@@ -282,7 +282,7 @@ mod tests {
                     .is_disjoint_from(BTreeSet::from(["foo"]));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `BTreeSet::from(["foo"])`

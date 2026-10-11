@@ -323,7 +323,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).is_sensitive())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -361,7 +361,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).is_not_sensitive())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -399,7 +399,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).is_ascii())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `actual`
@@ -498,7 +498,7 @@ mod tests {
 
             assert_that!(|| assert_that!(actual).with_location(false).ascii())
                 .panics()
-                .has_message()
+                .message()
                 .contains(r#"Actual: "\xc3\x84""#);
         }
     }

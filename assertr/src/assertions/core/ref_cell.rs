@@ -323,7 +323,7 @@ mod tests {
             let cell = RefCell::new(42);
             assert_that!(|| assert_that!(&cell).with_location(false).is_borrowed())
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&cell`
@@ -441,7 +441,7 @@ mod tests {
                     .is_not_mutably_borrowed()
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `&cell`

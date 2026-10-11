@@ -559,7 +559,7 @@ mod tests {
                     .contains_exactly([3, 1, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Actual: [\n    3,\n    1,\n    2,\n]")
             .does_not_contain("sorted for rendering");
         }
@@ -591,7 +591,7 @@ mod tests {
                     .starts_with([1, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `[1, 2, 3]`
@@ -742,7 +742,7 @@ mod tests {
                     .starts_with_matching([1, 2].map(equals).map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 3]`
@@ -811,7 +811,7 @@ mod tests {
                     .ends_with([2, 9]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("does not end with\n\nExpected: [\n    2,\n    9,\n]")
             .contains("Nested failures:\n  - At [2]:\n    Expected: 9\n\n      Actual: 3\n");
         }
@@ -837,7 +837,7 @@ mod tests {
                     .ends_with_matching([2, 3].map(equals).map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(indoc::formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 4]`
@@ -891,7 +891,7 @@ mod tests {
                     .contains_contiguous([1, 3]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Actual: [\n    1,\n    2,\n    3,\n]")
             .contains(
                 "does not contain the contiguous subsequence\n\nExpected: [\n    1,\n    3,\n]",
@@ -975,7 +975,7 @@ mod tests {
                     .contains_exactly([2, 3, 4]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `[1, 2, 3].as_slice()`
@@ -1018,7 +1018,7 @@ mod tests {
                     .contains_exactly([3, 2, 1]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `[1, 2, 3].as_slice()`
@@ -1056,7 +1056,7 @@ mod tests {
                     .contains_exactly([1, 2, 2]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `[1, 1, 2].as_slice()`
@@ -1178,7 +1178,7 @@ mod tests {
                     );
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].as_slice()`
@@ -1214,7 +1214,7 @@ mod tests {
                     .contains_exactly_matching(predicates.map(matchers::predicate));
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `[1, 2, 3].as_slice()`
@@ -1271,7 +1271,7 @@ mod tests {
                 assert_that!(Vec::<i32>::new()).with_location(false).first();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `Vec::<i32>::new()`

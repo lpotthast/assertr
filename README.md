@@ -102,7 +102,7 @@ assert_that!(Some(42)).some().is_greater_than(40);
 assert_that!("42".parse::<u32>()).ok().is_equal_to(42);
 assert_that!(|| panic!("boom"))
     .panics()
-    .has_message()
+    .message()
     .is_equal_to("boom");
 ```
 

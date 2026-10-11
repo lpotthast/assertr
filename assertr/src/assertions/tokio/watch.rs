@@ -324,7 +324,7 @@ mod tests {
                     })
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `rx`
@@ -446,7 +446,7 @@ mod tests {
             receiver.mark_unchanged();
             assert_that!(|| assert_that!(receiver).with_location(false).has_changed())
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `receiver`

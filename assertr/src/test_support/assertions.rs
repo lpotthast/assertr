@@ -37,7 +37,7 @@ impl<M: Mode, R> FailureReportAssertions for AssertThat<'_, AssertionFailure, M,
 pub(crate) fn rejected_kind(kind: FailureKind, extract: impl FnOnce()) {
     assert_that_owned!(extract)
         .panics()
-        .has_message()
+        .message()
         .is_equal_to(alloc::format!("{kind:?}"));
 }
 

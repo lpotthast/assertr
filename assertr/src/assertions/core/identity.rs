@@ -292,7 +292,7 @@ mod tests {
                     .is_same_instance_as(expected)
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {"
                 -------- assertr --------
                 Expression: `actual`

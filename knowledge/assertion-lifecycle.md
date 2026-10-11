@@ -25,14 +25,14 @@ that reports to its parent.
 
 ## Chain representation
 
-| Part of `AssertThat<'t, T, M, R>` | Purpose                                                                                              |
-|-----------------------------------|------------------------------------------------------------------------------------------------------|
-| `Actual<'t, T>`                   | `Borrowed(&T)` or `Owned(T)`. `actual()` returns `&T`.                                               |
-| `M: Mode`                         | Compile-time failure handling, sealed to `Panic` and `Capture`.                                      |
-| `R`                               | Active renderer. Methods require only the rendering capabilities they use.                           |
-| `ChainState` (private)            | Mode, renderer, records, and `DiagnosticSettings`. Independent of subject type.                      |
+| Part of `AssertThat<'t, T, M, R>` | Purpose                                                                                                                     |
+|-----------------------------------|-----------------------------------------------------------------------------------------------------------------------------|
+| `Actual<'t, T>`                   | `Borrowed(&T)` or `Owned(T)`. `actual()` returns `&T`.                                                                      |
+| `M: Mode`                         | Compile-time failure handling, sealed to `Panic` and `Capture`.                                                             |
+| `R`                               | Active renderer. Methods require only the rendering capabilities they use.                                                  |
+| `ChainState` (private)            | Mode, renderer, records, and `DiagnosticSettings`. Independent of subject type.                                             |
 | `DiagnosticSettings` (private)    | Subject name, expression, location policy and `satisfies` caller, rendering budget, panic presentation. Kept when detached. |
-| `ChainRecords` (private)          | Local messages, assertion count, captured failures, optional parent-record link.                     |
+| `ChainRecords` (private)          | Local messages, assertion count, captured failures, optional parent-record link.                                            |
 
 A root has no parent link. A child's link gives it access to ancestor records, but not to ancestor subjects, renderers,
 or panic presentations. The child's subject may also borrow a value projected from its parent. That borrow has its
@@ -67,10 +67,10 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 
 ## Projections and continuation
 
-| Operation                                       | State and metadata                                                                          | Renderer                 |
-|-------------------------------------------------|---------------------------------------------------------------------------------------------|--------------------------|
-| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression.                                   | Moved, no `Clone` bound. |
-| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression. | Cloned.                  |
+| Operation                                       | State and metadata                                                                                                          | Renderer                 |
+|-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|--------------------------|
+| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression.                                                                   | Moved, no `Clone` bound. |
+| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression.                                 | Cloned.                  |
 | `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain. Locate its failures at the outermost `satisfies` call. | Cloned for child.        |
 
 - `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` moves an owned subject into its mapper and clones only a
@@ -93,19 +93,20 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 | JSON/TOML conversion                                   | Serialize the borrowed subject once, map to owned `Result<String, Error>` in either mode. Errors remain `Err` for later checks. This transformation counts no assertion. |
 
 For example, program existence retains its subject, while resolved-path extraction promises a `PathBuf`. Type checks and
-extractions on erased boxes, panic payloads, and rootcause contexts use the same distinction. Owned payloads can transfer
-ownership. Borrowed payloads remain borrowed. Message extraction with `has_message` always yields an owned `String`: it
+extractions on erased boxes, panic payloads, and rootcause contexts use the same distinction. Owned payloads can
+transfer
+ownership. Borrowed payloads remain borrowed. Message extraction with `message` always yields an owned `String`: it
 moves an owned `String` payload and copies a `&str` payload or a borrowed message.
 
 ### Async constraints
 
 Chains are neither `Send` nor `Sync`: their records are interior-mutable and may borrow parent records.
-A future retaining a chain across suspension cannot be `Send`. Async projections can be awaited locally. For a `Send` task,
-construct and finish the chain after required awaits. Capture callbacks return chains, never futures.
-[Eventual assertions](observation-boundaries.md#eventual-observations) and
-[thirtyfour observations](observation-boundaries.md#browser-element-observations) are exceptions: they detach the chain before
-their first suspension, so their futures are `Send` whenever the observation, expectation, and renderer are.
-The [async compile-fail examples](../assertr/src/crate_docs.md#async-code) demonstrate these limits.
+A future retaining a chain across suspension cannot be `Send`. Async projections can be awaited locally. For a `Send`
+task, construct and finish the chain after required awaits. Capture callbacks return chains, never futures.
+[Eventual assertions](observation-boundaries.md#eventual-observations)
+and [thirtyfour observations](observation-boundaries.md#browser-element-observations) are exceptions: they detach the
+chain before their first suspension, so their futures are `Send` whenever the observation, expectation, and renderer
+are. The [async compile-fail examples](../assertr/src/crate_docs.md#async-code) demonstrate these limits.
 See [invocation and polling](observation-boundaries.md#invocation-and-polling) for operation timing and cancellation.
 
 ## Unwind safety

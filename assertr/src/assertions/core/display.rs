@@ -115,7 +115,7 @@ mod tests {
                         .has_display_value("foo")
                 })
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `42`

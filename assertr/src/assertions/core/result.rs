@@ -302,7 +302,7 @@ mod tests {
                     .is_ok();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `Result::<i32, String>::Err("someError".to_owned())`
@@ -351,7 +351,7 @@ mod tests {
                     .is_err();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `Result::<i32, String>::Ok(42)`

@@ -304,7 +304,7 @@ mod tests {
                 assert_that!(zdt).with_location(false).is_in_time_zone(tz);
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `zdt`
@@ -363,7 +363,7 @@ mod tests {
                     .is_in_time_zone_named("Europe/Berlin");
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
                 Expression: `zdt`

@@ -750,7 +750,7 @@ mod tests {
                     .contains_same_instance_as(&keys[1]);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("does not contain the same instance as");
         }
     }

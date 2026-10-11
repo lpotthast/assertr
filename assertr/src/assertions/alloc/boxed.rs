@@ -141,7 +141,7 @@ impl<E: 'static, P: Payload, R> Expectation<P, R> for IsOfType<E> {
 ///
 /// `panic!("literal")` raises a `&str` payload, while `panic!("{value}")` raises a `String`.
 /// This definition accepts both, so a message check does not depend on how the panic was
-/// formatted. [`BoxExtractAssertions::has_message`] executes this same definition and continues
+/// formatted. [`BoxExtractAssertions::message`] executes this same definition and continues
 /// with the message. Supported subjects are the same as for [`IsOfType`].
 ///
 /// ```
@@ -207,7 +207,7 @@ fn into_message(payload: Box<dyn Any>) -> Option<String> {
 /// Implemented for `Box<dyn Any>`, `Box<dyn Any + Send>`, and `Box<dyn Any + Send + Sync>`
 /// subjects, including the payloads returned by `std::panic::catch_unwind` and
 /// `std::thread::JoinHandle::join`, and for [`PanicValue`] subjects.
-/// Use [`BoxExtractAssertions::has_type`] to continue with the downcast value.
+/// Use [`BoxExtractAssertions::downcast`] to continue with the downcast value.
 #[allow(clippy::return_self_not_must_use)]
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait BoxAssertions {
@@ -225,10 +225,10 @@ pub trait BoxExtractAssertions<'t, R = DebugRenderer> {
     ///
     /// An owned subject produces an `AssertThat<E>` owning `E`. A borrowed subject produces an
     /// `AssertThat<E>` borrowing it.
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R>;
+    fn downcast<E: 'static>(self) -> AssertThat<'t, E, Panic, R>;
 
     /// Asserts that the payload has type `E` and returns an assertion over `&E`.
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    fn downcast_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
     where
         R: Clone;
 
@@ -236,7 +236,7 @@ pub trait BoxExtractAssertions<'t, R = DebugRenderer> {
     /// that message.
     ///
     /// `panic!("literal")` raises a `&str` payload, while `panic!("{value}")` raises a `String`.
-    /// This method accepts both, so prefer it over [`has_type`](Self::has_type) when only the
+    /// This method accepts both, so prefer it over [`downcast`](Self::downcast) when only the
     /// message matters. The message is copied into a `String` unless an owned subject already
     /// holds one.
     ///
@@ -247,10 +247,10 @@ pub trait BoxExtractAssertions<'t, R = DebugRenderer> {
     /// # #[cfg(feature = "std")]
     /// assert_that!(move || panic!("no user {id}"))
     ///     .panics()
-    ///     .has_message()
+    ///     .message()
     ///     .is_equal_to("no user 7");
     /// ```
-    fn has_message(self) -> AssertThat<'t, String, Panic, R>;
+    fn message(self) -> AssertThat<'t, String, Panic, R>;
 }
 
 impl<P: Payload, M: Mode, R> BoxAssertions for AssertThat<'_, P, M, R> {
@@ -262,7 +262,7 @@ impl<P: Payload, M: Mode, R> BoxAssertions for AssertThat<'_, P, M, R> {
 
 impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic, R> {
     #[track_caller]
-    fn has_type<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
+    fn downcast<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
         self.matches(IsOfType::<E>::new()).map(|actual| {
             project_checked(
                 actual,
@@ -273,7 +273,7 @@ impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic,
     }
 
     #[track_caller]
-    fn has_type_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
+    fn downcast_ref<E: 'static>(&'t self) -> AssertThat<'t, &'t E, Panic, R>
     where
         R: Clone,
     {
@@ -282,7 +282,7 @@ impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic,
     }
 
     #[track_caller]
-    fn has_message(self) -> AssertThat<'t, String, Panic, R> {
+    fn message(self) -> AssertThat<'t, String, Panic, R> {
         self.matches(HasPanicMessage).map(|actual| {
             let message = match actual {
                 Actual::Owned(payload) => into_message(payload.into_any()),
@@ -312,9 +312,6 @@ mod tests {
         fn are_as_expected() {
             let value: Box<dyn Any> = Box::new("foo");
             value.must().be_of_type::<&str>();
-            value.must().have_type::<&str>();
-            value.must().have_type_ref::<&str>();
-            value.must().have_message();
         }
     }
 
@@ -356,7 +353,7 @@ mod tests {
             let value = PanicValue(Box::new("foo"));
             assert_that!(value)
                 .is_of_type::<&str>()
-                .has_type::<&str>()
+                .downcast::<&str>()
                 .is_equal_to("foo");
             let failures =
                 assert_that!(value).capture(|it| it.is_of_type::<String>().is_of_type::<&str>());
@@ -389,7 +386,7 @@ mod tests {
         }
     }
 
-    mod has_type {
+    mod downcast {
         use core::any::type_name;
 
         use super::*;
@@ -397,21 +394,21 @@ mod tests {
         #[test]
         fn caller_location_is_as_expected() {
             let value: Box<dyn Any> = Box::new(1_i32);
-            assert_caller_location!(assert_that!(value), has_type::<u8>());
+            assert_caller_location!(assert_that!(value), downcast::<u8>());
         }
 
         #[test]
         fn extracts_owned_and_borrowed_payloads() {
             let boxed: Box<dyn Any> = Box::new("foo");
-            assert_that!(boxed).has_type::<&str>().is_equal_to("foo");
-            assert_that!(&boxed).has_type::<&str>().is_equal_to("foo");
+            assert_that!(boxed).downcast::<&str>().is_equal_to("foo");
+            assert_that!(&boxed).downcast::<&str>().is_equal_to("foo");
             assert_that_owned!(boxed)
-                .has_type::<&str>()
+                .downcast::<&str>()
                 .is_equal_to("foo");
             let value = PanicValue(Box::new(String::from("foo")));
-            assert_that!(value).has_type::<String>().is_equal_to("foo");
+            assert_that!(value).downcast::<String>().is_equal_to("foo");
             assert_that_owned!(value)
-                .has_type::<String>()
+                .downcast::<String>()
                 .is_equal_to(String::from("foo"));
         }
 
@@ -426,13 +423,13 @@ mod tests {
                         String::from(failure.subject_type_name)
                     });
                     if extract {
-                        let _ = assertion.has_type::<u32>();
+                        let _ = assertion.downcast::<u32>();
                     } else {
                         assertion.is_of_type::<u32>();
                     }
                 })
                 .panics()
-                .has_type::<String>()
+                .message()
                 .is_equal_to(type_name::<PanicValue>());
             }
         }
@@ -444,10 +441,10 @@ mod tests {
             assert_that!(|| {
                 assert_that!(boxed_any)
                     .with_location(false)
-                    .has_type::<u32>();
+                    .downcast::<u32>();
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `boxed_any`
@@ -469,9 +466,9 @@ mod tests {
             assert_that!(|| {
                 assert_that_owned!(boxed_any)
                     .with_location(false)
-                    .has_type::<u32>();
+                    .downcast::<u32>();
             }).panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `boxed_any`
@@ -494,9 +491,9 @@ mod tests {
             let actual = PanicValue(Box::new(Foo));
 
             assert_that!(|| {
-                assert_that!(actual).with_location(false).has_type::<u32>();
+                assert_that!(actual).with_location(false).downcast::<u32>();
             }).panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `actual`
@@ -514,36 +511,36 @@ mod tests {
         }
     }
 
-    mod has_type_ref {
+    mod downcast_ref {
         use super::*;
 
         #[test]
         fn caller_location_is_as_expected() {
             let value: Box<dyn Any> = Box::new(1_i32);
-            assert_caller_location!(assert_that!(value), has_type_ref::<u8>());
+            assert_caller_location!(assert_that!(value), downcast_ref::<u8>());
         }
 
         #[test]
         fn succeeds_when_type_matches() {
             let actual: Box<dyn Any + Send + Sync> = Box::new(String::from("foo"));
             assert_that!(actual)
-                .has_type_ref::<String>()
+                .downcast_ref::<String>()
                 .is_equal_to(&String::from("foo"));
             let actual = PanicValue(Box::new(String::from("foo")));
             assert_that!(actual)
-                .has_type_ref::<String>()
+                .downcast_ref::<String>()
                 .is_equal_to(&String::from("foo"));
         }
     }
 
-    mod has_message {
+    mod message {
         use super::*;
         use crate::matchers::HasPanicMessage;
 
         #[test]
         fn caller_location_is_as_expected() {
             let value: Box<dyn Any> = Box::new(1_i32);
-            assert_caller_location!(assert_that!(value), has_message());
+            assert_caller_location!(assert_that!(value), message());
         }
 
         #[test]
@@ -551,20 +548,18 @@ mod tests {
             let id = 7;
             assert_that!(|| panic!("literal"))
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to("literal");
             assert_that!(move || panic!("formatted {id}"))
                 .panics()
-                .has_message()
+                .message()
                 .is_equal_to("formatted 7");
             let literal: Box<dyn Any + Send> = Box::new("literal");
-            assert_that!(literal).has_message().is_equal_to("literal");
-            assert_that_owned!(literal)
-                .has_message()
-                .is_equal_to("literal");
+            assert_that!(literal).message().is_equal_to("literal");
+            assert_that_owned!(literal).message().is_equal_to("literal");
             let owned = PanicValue(Box::new(String::from("owned")));
-            assert_that!(owned).has_message().is_equal_to("owned");
-            assert_that_owned!(owned).has_message().is_equal_to("owned");
+            assert_that!(owned).message().is_equal_to("owned");
+            assert_that_owned!(owned).message().is_equal_to("owned");
         }
 
         #[test]
@@ -580,10 +575,10 @@ mod tests {
             let actual = PanicValue(Box::new(3_u8));
 
             assert_that!(|| {
-                let _ = assert_that!(actual).with_location(false).has_message();
+                let _ = assert_that!(actual).with_location(false).message();
             })
             .panics()
-            .has_message()
+            .message()
             .is_equal_to(formatdoc! {r"
                 -------- assertr --------
                 Expression: `actual`
@@ -610,13 +605,13 @@ mod tests {
                 std::panic::catch_unwind(|| panic!("boom")).unwrap_err();
             assert_that!(payload)
                 .is_of_type::<&str>()
-                .has_type::<&str>()
+                .downcast::<&str>()
                 .is_equal_to("boom");
 
             let payload: Box<dyn Any + Send> =
                 std::thread::spawn(|| panic!("joined")).join().unwrap_err();
             assert_that_owned!(payload)
-                .has_type::<&str>()
+                .downcast::<&str>()
                 .is_equal_to("joined");
         }
     }

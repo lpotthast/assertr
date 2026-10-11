@@ -149,7 +149,7 @@ mod tests {
     fn accepts_multiline_generic_extractions() {
         assert_caller_location!(
             assert_that_owned!(Box::new(1_i32) as Box<dyn core::any::Any>),
-            has_type::<u8>()
+            downcast::<u8>()
         );
     }
 

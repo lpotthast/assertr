@@ -135,7 +135,7 @@ mod tests {
                 assert_that!([7]).with_renderer(CustomValueRenderer).at(9);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .contains("Expected: custom(9)")
             .contains("Actual length: custom(1)");
         }
@@ -162,7 +162,7 @@ mod tests {
                 assert_that!(vec![1, 2]).with_location(false).at(2);
             })
             .panics()
-            .has_type::<String>()
+            .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
                     Expression: `vec![1, 2]`

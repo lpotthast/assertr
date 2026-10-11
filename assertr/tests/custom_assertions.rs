@@ -487,7 +487,7 @@ mod leaf {
             assert_that!(person(12)).with_location(false).is_adult();
         })
         .panics()
-        .has_message()
+        .message()
         .contains("is not an adult");
     }
 
