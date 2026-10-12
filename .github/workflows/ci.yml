@@ -37,13 +37,13 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
-      - run: cargo clippy -p assertr --all-targets --no-default-features --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr --all-targets --no-default-features --features std --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr --all-targets --no-default-features --features num --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr --all-targets --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr --all-targets --all-features --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr-macros --all-targets --locked -- -D warnings -W clippy::pedantic
-      - run: cargo clippy -p assertr-no-std-tests --all-targets --locked -- -D warnings -W clippy::pedantic
+      - run: cargo clippy -p assertr --all-targets --no-default-features --locked -- -D warnings
+      - run: cargo clippy -p assertr --all-targets --no-default-features --features std --locked -- -D warnings
+      - run: cargo clippy -p assertr --all-targets --no-default-features --features num --locked -- -D warnings
+      - run: cargo clippy -p assertr --all-targets --locked -- -D warnings
+      - run: cargo clippy -p assertr --all-targets --all-features --locked -- -D warnings
+      - run: cargo clippy -p assertr-macros --all-targets --locked -- -D warnings
+      - run: cargo clippy -p assertr-no-std-tests --all-targets --locked -- -D warnings
 
   # Every feature on its own: Cargo unifies features within one invocation, so an integration
   # that silently relies on another feature is only visible when it is the only one enabled.

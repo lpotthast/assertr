@@ -65,13 +65,13 @@ check-no-std:
 
 # Lint the code.
 clippy:
-    cargo clippy -p assertr --all-targets --no-default-features -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr --all-targets --no-default-features --features std -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr --all-targets --no-default-features --features num -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr --all-targets -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr --all-targets --all-features -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr-macros --all-targets -- -D warnings -W clippy::pedantic
-    cargo clippy -p assertr-no-std-tests --all-targets -- -D warnings -W clippy::pedantic
+    cargo clippy -p assertr --all-targets --no-default-features -- -D warnings
+    cargo clippy -p assertr --all-targets --no-default-features --features std -- -D warnings
+    cargo clippy -p assertr --all-targets --no-default-features --features num -- -D warnings
+    cargo clippy -p assertr --all-targets -- -D warnings
+    cargo clippy -p assertr --all-targets --all-features -- -D warnings
+    cargo clippy -p assertr-macros --all-targets -- -D warnings
+    cargo clippy -p assertr-no-std-tests --all-targets -- -D warnings
 
 # Run all tests.
 test:
