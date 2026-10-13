@@ -26,6 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `envs()`, and `current_dir()`, which continue with the general assertion families. They apply to every `StdCommand`:
   `std::process::Command`, `tokio::process::Command` with the new `tokio-process` feature, and custom command builders
   that expose their standard command.
+- `contains_occurrences(substring, count)` asserts how often a string contains a substring, counting non-overlapping
+  occurrences like `str::matches`. `matchers::string::contains_occurrences(..)` is the matcher form.
 
 ### Changed
 

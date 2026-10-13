@@ -313,9 +313,9 @@ pub mod character {
 pub mod string {
     #[doc(inline)]
     pub use crate::assertions::core::string::{
-        Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
+        Contains, ContainsOccurrences, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
         EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith, contains,
-        does_not_contain, does_not_end_with, does_not_start_with, ends_with,
+        contains_occurrences, does_not_contain, does_not_end_with, does_not_start_with, ends_with,
         equal_to_ignoring_ascii_case, starts_with,
     };
 }

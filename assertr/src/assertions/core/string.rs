@@ -1,6 +1,7 @@
 use crate::{
     AssertThat, Mode,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
 };
 
@@ -252,6 +253,98 @@ str_expectation! {
     constructor does_not_end_with;
 }
 
+/// Counts the non-overlapping occurrences of a substring, like [`str::matches`], and compares the
+/// count with an expected count.
+///
+/// An empty substring occurs at every character boundary, so `""` occurs once more than the
+/// subject has characters.
+///
+/// ```
+/// use assertr::{matchers::string::contains_occurrences, prelude::*};
+///
+/// assert_that!("- to: a\n- to: b").matches(contains_occurrences("- to:", 2));
+/// ```
+#[derive(Debug, Clone)]
+pub struct ContainsOccurrences<E> {
+    substring: E,
+    count: usize,
+}
+
+impl<E> ContainsOccurrences<E> {
+    /// Expects exactly `count` occurrences of `substring`.
+    #[must_use]
+    pub const fn new(substring: E, count: usize) -> Self {
+        Self { substring, count }
+    }
+}
+
+/// Matches strings containing exactly `count` non-overlapping occurrences of `substring`.
+///
+/// This is a convenience constructor for [`ContainsOccurrences::new`].
+#[must_use]
+pub const fn contains_occurrences<E>(substring: E, count: usize) -> ContainsOccurrences<E> {
+    ContainsOccurrences::new(substring, count)
+}
+
+impl<T, E, R> Expectation<T, R> for ContainsOccurrences<E>
+where
+    T: AsRef<str> + ?Sized,
+    E: AsRef<str>,
+    R: ValueRenderer<str> + ValueRenderer<usize>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = (&'a str, &'a str, usize)
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let actual = actual.as_ref();
+        let substring = self.substring.as_ref();
+        let count = actual.matches(substring).count();
+        if count == self.count {
+            Ok(())
+        } else {
+            Err((actual, substring, count))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let substring = rejected.map_or_else(|| self.substring.as_ref(), |(_, (_, it, _))| it);
+        let failure = failure
+            .relations(
+                rejected.map(|(_, (actual, _, _))| render.value(actual)),
+                "contains the substring the expected number of times",
+                "does not contain the substring the expected number of times",
+            )
+            .expected(render.value(substring))
+            .fact(Fact::labelled("Expected count", render.value(&self.count)));
+        match rejected {
+            None => failure,
+            Some((_, (_, _, count))) => {
+                failure.fact(Fact::labelled("Actual count", render.value(&count)))
+            }
+        }
+    }
+}
+
 /// String-specific assertions.
 ///
 /// Blanket-implemented for every subject that is `AsRef<str>`, so `&str`, `String`, `&String`,
@@ -290,6 +383,18 @@ pub trait StrAssertions<R = DebugRenderer> {
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self
     where
         R: ValueRenderer<str>;
+
+    /// Asserts that the subject contains exactly `count` non-overlapping occurrences of
+    /// `substring`, counted like [`str::matches`].
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!("users:\n  - to: default\n  - to: admin").contains_occurrences("- to:", 2);
+    /// ```
+    fn contains_occurrences(self, substring: impl AsRef<str>, count: usize) -> Self
+    where
+        R: ValueRenderer<str> + ValueRenderer<usize>;
 
     /// Asserts that the subject starts with `expected`.
     fn starts_with(self, expected: impl AsRef<str>) -> Self
@@ -362,6 +467,14 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     }
 
     #[track_caller]
+    fn contains_occurrences(self, substring: impl AsRef<str>, count: usize) -> Self
+    where
+        R: ValueRenderer<str> + ValueRenderer<usize>,
+    {
+        self.matches(ContainsOccurrences::new(substring, count))
+    }
+
+    #[track_caller]
     fn starts_with(self, expected: impl AsRef<str>) -> Self
     where
         R: ValueRenderer<str>,
@@ -408,6 +521,7 @@ mod tests {
             "FoObAr".must().be_equal_to_ignoring_ascii_case("fOoBaR");
             "foobar".must().contain("foo");
             "foobar".must().not_contain("baz");
+            "foobar".must().contain_occurrences("o", 2);
             "foo bar baz".must().start_with("foo b");
             "foo bar baz".must().not_start_with("oo");
             "foo bar baz".must().end_with("r baz");
@@ -749,6 +863,51 @@ mod tests {
             assert_that!("foobar").contains("bar");
             assert_that!("foobar").contains("oob");
             assert_that!(String::from("foobar")).contains("oob");
+        }
+    }
+
+    mod contains_occurrences {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("a-a"), contains_occurrences("a", 1));
+        }
+
+        #[test]
+        fn counts_non_overlapping_occurrences() {
+            assert_that!("a-a-a").contains_occurrences("a", 3);
+            assert_that!("aaa").contains_occurrences("aa", 1);
+            assert_that!(String::from("abc")).contains_occurrences("x", 0);
+            assert_that!("ab").contains_occurrences("", 3);
+        }
+
+        #[test]
+        fn panics_with_both_counts() {
+            assert_that!(|| {
+                assert_that!("a-a")
+                    .with_location(false)
+                    .contains_occurrences("a", 3);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `"a-a"`
+
+                Actual: "a-a"
+
+                does not contain the substring the expected number of times
+
+                Expected: "a"
+
+                Details:
+                  - Expected count: 3
+                  - Actual count: 2
+                -------- assertr --------
+            "#});
         }
     }
 
