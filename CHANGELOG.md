@@ -32,6 +32,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   negative form reports every unexpected value it found.
 - `matchers::showing_actual(..)` adds the rendered subject to the rejection of any matcher. It shows the actual value of
   a `partial!` variant mismatch or of a failing `each(..)`, which render only the parts they check.
+- `renderer::Opaque<T>` wraps a value that cannot be rendered, so diagnostics show its type name. It makes `is_err()`
+  and `err()` usable on results whose `Ok` type has no `Debug` implementation, as in
+  `assert_that_owned!(result.map(Opaque::new)).err()`.
 - `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
   failure reports the matching elements.
 

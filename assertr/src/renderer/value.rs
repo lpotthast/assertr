@@ -86,7 +86,8 @@ use core::fmt;
 #[diagnostic::on_unimplemented(
     message = "`{Self}` cannot render values of type `{T}`",
     label = "missing value rendering support for `{T}`",
-    note = "derive `Debug` for `{T}` or call `.with_debug_format(...)` / `.with_renderer(...)` before this assertion"
+    note = "derive `Debug` for `{T}` or call `.with_debug_format(...)` / `.with_renderer(...)` before this assertion",
+    note = "if the test is not about this value, wrap it in `assertr::renderer::Opaque` to show only its type name"
 )]
 pub trait ValueRenderer<T: ?Sized> {
     /// Formats `value` for assertion diagnostics.

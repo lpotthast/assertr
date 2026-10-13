@@ -24,6 +24,9 @@ sources:
 other structures, then [lays out the failure report](failure-processing.md#report-grammar). `DebugRenderer` is the
 default. Custom renderers can handle subjects that do not implement `Debug`. A shared reference `&R` renders like `R`,
 so `with_renderer(&renderer)` satisfies the `Clone` bound of derived assertions when the renderer itself is not `Clone`.
+Without specialization, a renderer cannot fall back for types it does not support. A value that is not under test but
+must still be rendered, such as the unexpected `Ok` value of `is_err`, can be wrapped in `renderer::Opaque`, whose
+`Debug` output is only its type name.
 
 ## Capabilities and structure
 
