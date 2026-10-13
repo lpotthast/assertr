@@ -58,6 +58,7 @@ See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) f
 |---|---|
 | Element membership | Search by the [selected comparison view](comparison-operands.md#borrowed-views). Set subjects still use collection equality for these checks. |
 | `contains_all` | Every expected value has a match. Duplicate expectations may reuse one actual occurrence. |
+| `contains_any_of`, `does_not_contain_any_of` | At least one or none of the expected values has a match. An empty list never matches `contains_any_of`. Found unexpected values are reported in expected order. |
 | Ordered exact | Match every position and require equal lengths. Needs `StableOrder`. |
 | Unordered exact | Pair every actual occurrence and every expected slot exactly once, preserving duplicates. Uses [maximum assignment](matcher-composition.md#exact-unordered-assignment). |
 | Set relations | Native `SetLookup` membership and its uniqueness equivalence. |

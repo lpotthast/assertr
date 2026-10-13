@@ -28,6 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   that expose their standard command.
 - `contains_occurrences(substring, count)` asserts how often a string contains a substring, counting non-overlapping
   occurrences like `str::matches`. `matchers::string::contains_occurrences(..)` is the matcher form.
+- `contains_any_of(..)` and `does_not_contain_any_of(..)` check collections of any kind against a list of values. The
+  negative form reports every unexpected value it found.
 
 ### Changed
 

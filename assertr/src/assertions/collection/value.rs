@@ -379,6 +379,145 @@ where
     }
 }
 
+/// Requires at least one element equal to one of the expected values.
+///
+/// An empty expected list never matches.
+/// [`CollectionAssertions::contains_any_of`](crate::assertions::CollectionAssertions::contains_any_of)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsAnyOf, prelude::*};
+///
+/// assert_that!(["warn", "info"]).matches(ContainsAnyOf::new(["error", "warn"]));
+/// ```
+pub struct ContainsAnyOf<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+expected_operands_traits!(ContainsAnyOf<E, B>, operand, new);
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsAnyOf<E, B>
+where
+    C::Item: PartialEq<E::View>,
+    E: BorrowFor<C::Item>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a C, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        let mut expected = self.expected.as_ref().iter().map(borrow_for::<C::Item, _>);
+        passed(expected.any(|expected| actual.elements().any(|it| it.eq(expected))))
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a C, ())>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let expected = self.expected.as_ref();
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.collection(actual)),
+                "contains any of",
+                "does not contain any of",
+            )
+            .expected(
+                render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+            )
+    }
+}
+
+/// Rejects collections containing an element equal to any of the unexpected values. The
+/// rejection retains the unexpected values that were found, in expected order.
+///
+/// [`CollectionAssertions::does_not_contain_any_of`](crate::assertions::CollectionAssertions::does_not_contain_any_of)
+/// executes this same definition. For two sets, `is_disjoint_from` checks the same relation
+/// through native lookup.
+///
+/// ```
+/// use assertr::{matchers::collection::DoesNotContainAnyOf, prelude::*};
+///
+/// assert_that!(["warn", "info"]).matches(DoesNotContainAnyOf::new(["error", "fatal"]));
+/// ```
+pub struct DoesNotContainAnyOf<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+expected_operands_traits!(DoesNotContainAnyOf<E, B>, operand, new);
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for DoesNotContainAnyOf<E, B>
+where
+    C::Item: PartialEq<E::View>,
+    E: BorrowFor<C::Item>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = Vec<&'a E::View>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let found = self
+            .expected
+            .as_ref()
+            .iter()
+            .map(borrow_for::<C::Item, _>)
+            .filter(|unexpected| actual.elements().any(|it| it.eq(*unexpected)))
+            .collect::<Vec<_>>();
+        if found.is_empty() { Ok(()) } else { Err(found) }
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let unexpected = self.expected.as_ref();
+        let failure = match rejected {
+            None => failure.relation("does not contain any of"),
+            Some((actual, found)) => failure
+                .actual(render.collection(actual))
+                .relation("contains some of")
+                .fact(Fact::labelled(
+                    "Elements found",
+                    render.borrowed_values::<E::View, _>(&found, RenderingOrder::PreserveIteration),
+                )),
+        };
+        failure.unexpected(
+            render.borrowed_values::<E::View, _>(unexpected, RenderingOrder::PreserveIteration),
+        )
+    }
+}
+
 /// A rejected affix subject with its retained evidence.
 type RejectedAffix<'a, C, V> = (&'a C, PositionalRejection<'a, <C as Collection>::Item, V>);
 

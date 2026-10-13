@@ -39,9 +39,9 @@ pub use matching::{
 pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
 pub use stable_order::{HasFirst, HasLast, StableOrderAssertions, StableOrderExtractAssertions};
 pub use value::{
-    Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-    DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
-    PositionalRejection, StartsWith,
+    Contains, ContainsAll, ContainsAnyOf, ContainsContiguous, ContainsExactly,
+    ContainsExactlyInAnyOrder, DoesNotContain, DoesNotContainAnyOf, EndsWith,
+    ExactElementsRejection, MissingElementsRejection, PositionalRejection, StartsWith,
 };
 
 use crate::{

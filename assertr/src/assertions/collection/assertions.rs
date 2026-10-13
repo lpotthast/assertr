@@ -117,6 +117,39 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
+    /// Asserts that at least one element equals one of the `expected` values.
+    ///
+    /// An empty expected list never matches. Expected values select their borrowed views like
+    /// [`contains_all`](Self::contains_all).
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!(["warn", "info"]).contains_any_of(["error", "warn"]);
+    /// ```
+    fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
+
+    /// Asserts that no element equals any of the `unexpected` values.
+    ///
+    /// The failure lists every unexpected value that was found. Expected values select their
+    /// borrowed views like [`contains_all`](Self::contains_all). Two sets can use the set relation
+    /// `is_disjoint_from` instead.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!(vec!["warn", "info"]).does_not_contain_any_of(["error", "fatal"]);
+    /// ```
+    fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: BorrowFor<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
+
     /// Asserts that no element equals `not_expected`.
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
@@ -257,6 +290,26 @@ where
     }
 
     #[track_caller]
+    fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
+    where
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+    {
+        self.matches(value::ContainsAnyOf::new(expected))
+    }
+
+    #[track_caller]
+    fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
+    where
+        C::Item: PartialEq<E::View>,
+        E: BorrowFor<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+    {
+        self.matches(value::DoesNotContainAnyOf::new(unexpected))
+    }
+
+    #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
@@ -333,6 +386,8 @@ mod tests {
             values.must().contain_matching(eq(2));
             values.must().contain_satisfying(is(2));
             values.must().contain_all([1, 3]);
+            values.must().contain_any_of([3, 4]);
+            values.must().not_contain_any_of([4, 5]);
             values.must().not_contain(4);
             values.must().not_contain_matching(eq(4));
             values.must().not_contain_satisfying(is(4));
@@ -611,6 +666,116 @@ mod tests {
                     Details:
                       - Elements not found: [
                             42,
+                        ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod contains_any_of {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2].as_slice()), contains_any_of([3, 4]));
+        }
+
+        #[test]
+        fn succeeds_when_one_expected_value_is_present() {
+            assert_that!([1, 2, 3].as_slice()).contains_any_of([9, 3]);
+            assert_that!(vec![String::from("foo")]).contains_any_of(["bar", "foo"]);
+        }
+
+        #[test]
+        fn rejects_an_empty_expected_list() {
+            let failures =
+                assert_that!([1].as_slice()).capture(|it| it.contains_any_of([] as [i32; 0]));
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn panics_when_no_expected_value_is_present() {
+            assert_that!(|| {
+                assert_that!([1, 2].as_slice())
+                    .with_location(false)
+                    .contains_any_of([3, 4]);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2].as_slice()`
+
+                    Actual: [
+                        1,
+                        2,
+                    ]
+
+                    does not contain any of
+
+                    Expected: [
+                        3,
+                        4,
+                    ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod does_not_contain_any_of {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].as_slice()),
+                does_not_contain_any_of([2, 3])
+            );
+        }
+
+        #[test]
+        fn succeeds_when_no_unexpected_value_is_present() {
+            assert_that!([1, 2].as_slice())
+                .does_not_contain_any_of([3, 4])
+                .does_not_contain_any_of([] as [i32; 0]);
+            assert_that!(vec![String::from("foo")]).does_not_contain_any_of(["bar"]);
+        }
+
+        #[test]
+        fn panics_with_every_unexpected_value_found() {
+            assert_that!(|| {
+                assert_that!([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .does_not_contain_any_of([3, 4, 1]);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains some of
+
+                    Unexpected: [
+                        3,
+                        4,
+                        1,
+                    ]
+
+                    Details:
+                      - Elements found: [
+                            3,
+                            1,
                         ]
                     -------- assertr --------
                 "});

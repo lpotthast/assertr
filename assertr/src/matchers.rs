@@ -325,10 +325,11 @@ pub mod string {
 pub mod collection {
     #[doc(inline)]
     pub use crate::assertions::collection::{
-        Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-        ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder,
-        ContainsSameInstanceAs, DoesNotContain, DoesNotContainSameInstanceAs, EndsWith,
-        ExactElementsRejection, ExactIdentityRejection, HasElementAt, HasFirst, HasLast, HasSingle,
+        Contains, ContainsAll, ContainsAnyOf, ContainsContiguous, ContainsExactly,
+        ContainsExactlyInAnyOrder, ContainsExactlySameInstances,
+        ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs, DoesNotContain,
+        DoesNotContainAnyOf, DoesNotContainSameInstanceAs, EndsWith, ExactElementsRejection,
+        ExactIdentityRejection, HasElementAt, HasFirst, HasLast, HasSingle,
         IdentityMembershipRejection, MissingElementsRejection, PositionalRejection, StartsWith,
         UnorderedIdentityRejection,
     };
