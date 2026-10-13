@@ -1665,8 +1665,7 @@ mod map_query_operands {
             .with_renderer(QueryRenderer)
             .capture(|it| {
                 it.matches(entry(Query("a"), eq(2)))
-                    // A single native &str query needs no BorrowFor registration for &str.
-                    .contains_entry_matching("a", eq(2))
+                    .contains_entry_matching(&query, eq(2))
             });
         assert_that!(failures).has_length(2);
         for failure in &failures {

@@ -18,9 +18,9 @@ pub struct Entry<K, M> {
     pub(super) matcher: M,
 }
 
-/// The rejection of [`entry`](crate::matchers::entry) and
-/// [`map::ContainsEntryMatching`](crate::matchers::map::ContainsEntryMatching): the stored key
-/// that was found, if any, and the evidence explaining the rejection.
+/// The rejection of [`entry`](crate::matchers::entry) and of
+/// [`MapAssertions::contains_entry_matching`](crate::assertions::MapAssertions::contains_entry_matching):
+/// the stored key that was found, if any, and the evidence explaining the rejection.
 ///
 /// `K` is the map's key type. When the key is present but its value was rejected, the rejection
 /// borrows the stored key and holds the value matcher's nested failures. When the key is missing,

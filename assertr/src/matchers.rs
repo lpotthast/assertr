@@ -342,9 +342,9 @@ pub mod collection {
 pub mod map {
     #[doc(inline)]
     pub use crate::assertions::map::{
-        ContainsEntry, ContainsEntryMatching, ContainsExactlyEntries, ContainsKey, ContainsKeys,
-        ContainsValue, ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey,
-        DoesNotContainValue, ExactEntriesRejection,
+        ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
+        ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
+        ExactEntriesRejection,
     };
 }
 

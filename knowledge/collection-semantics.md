@@ -98,7 +98,7 @@ values view preserves duplicates. Diagnostics present keys as a set and values a
 |---|---|
 | Bulk key operand | `BorrowFor<K>::View`, with stored key type `K` as context. `Borrow<View>` supplies the query. |
 | Native lookup | Separately requires `MapLookup<View>` with that map's own bounds. No universal `Hash`, `Ord`, or `PartialEq` requirement and no equality-scan fallback. |
-| Single-key method | Accepts native `&Q` without operand registration. |
+| Single-key method | Uses the same `BorrowFor<K>::View` selection as bulk operands, so owned, borrowed, and view operands all work. |
 | String key | Accepts `str` views. |
 | `Vec<u8>` key | Accepts explicit `&[u8]`. Array operands select array views and do not supply native vector-key lookup. |
 

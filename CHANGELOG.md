@@ -40,6 +40,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** Single-key map assertions (`contains_key`, `does_not_contain_key`, `contains_entry`,
+  `contains_entry_matching`, `contains_entry_satisfying`, and `does_not_contain_entry`) and the matchers `ContainsKey`,
+  `DoesNotContainKey`, `ContainsEntry`, and `DoesNotContainEntry` take their key by value through `BorrowFor<K>`, like
+  the bulk methods and `entry(..)`. `contains_key(1)`, `contains_key("a")` on `String` keys, and `contains_key(&key)`
+  all work. A custom query type needs a `BorrowFor` implementation, and keys of `&str` maps render as `&str`.
+- **Breaking:** `matchers::map::ContainsEntryMatching` is removed. `contains_entry_matching` uses `entry(..)`.
 - Failures of derived chains and extractions keep the subject name and the expression of their root chain, and report
   how they reached their subject on a new `Projection:` line, such as ``Projection: `.err().current_context()` ``.
   `AssertionFailure::projections` holds these steps. Arbitrary mappings record their method with elided arguments, such

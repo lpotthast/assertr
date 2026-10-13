@@ -28,7 +28,7 @@ pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
     DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue, ExactEntriesRejection,
 };
-pub use matching::{ContainsEntryMatching, ContainsValueMatching};
+pub use matching::ContainsValueMatching;
 pub use projection::{MapKeys, MapProjectionAssertions, MapValues};
 
 use crate::{assertions::HasLength, renderer::RenderingOrder};
