@@ -61,7 +61,7 @@ Everything beyond `std` and `num` is opt-in:
 | `libm`                                          | Floating-point checks like `is_nan` for `num` in `no_std` builds. Does not enable `num`. |
 | `partial`                                       | The `partial!` macro for matching selected struct fields.                                |
 | `fluent`                                        | The `value.must()` and `value.verify(..)` entry points with fluent method names.         |
-| `serde-json`, `serde-toml`                      | `as_json()` and `as_toml()` to assert on a value's serialized form.                      |
+| `serde-json`, `serde-toml`                      | `as_json()` and `as_toml()` for serialized forms, and JSON pointer and value assertions. |
 | `serde`                                         | Both `serde-json` and `serde-toml`.                                                      |
 | `program`                                       | Checks that a program name or path resolves to an executable, like `which`.              |
 | `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name.                                    |

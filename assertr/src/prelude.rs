@@ -24,6 +24,8 @@ pub use crate::assertions::{
 };
 #[cfg(feature = "http")]
 pub use crate::assertions::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
+#[cfg(feature = "serde-json")]
+pub use crate::assertions::{JsonValueAssertions, JsonValueExtractAssertions};
 #[cfg(feature = "program")]
 pub use crate::assertions::{Program, ProgramAssertions, ProgramExtractAssertions};
 #[cfg(feature = "reqwest")]

@@ -67,6 +67,7 @@
 //! | Paths, commands, and mutexes (`std`) | `path`, `command`, `mutex` |
 //! | HTTP (`http`, `reqwest`) | `header_value`, `response` |
 //! | Jiff (`jiff`) | `signed_duration`, `span`, `zoned` |
+//! | JSON values (`serde-json`) | `json` |
 //! | Programs and reports (`program`, `rootcause`) | `program`, `report` |
 //! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
 //! | Combining checks | [`all_of`], [`any_of`], [`each`], [`each_in_any_order`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`showing_actual`], [`anything`] |
@@ -470,6 +471,15 @@ pub mod response {
     pub use crate::assertions::reqwest::response::{
         DoesNotHaveHeader, HasHeader, HasHeaderValue, HasStatusCode, HeaderRejection,
         IsClientError, IsInformational, IsRedirection, IsServerError, IsSuccess,
+    };
+}
+
+/// JSON pointer and value kind expectations. Requires `serde-json`.
+#[cfg(feature = "serde-json")]
+pub mod json {
+    #[doc(inline)]
+    pub use crate::assertions::json::{
+        HasPointer, IsArray, IsBool, IsF64, IsI64, IsNull, IsObject, IsString, IsU64,
     };
 }
 

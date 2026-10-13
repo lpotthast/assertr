@@ -35,6 +35,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `renderer::Opaque<T>` wraps a value that cannot be rendered, so diagnostics show its type name. It makes `is_err()`
   and `err()` usable on results whose `Ok` type has no `Debug` implementation, as in
   `assert_that_owned!(result.map(Opaque::new)).err()`.
+- JSON value assertions with the `serde-json` feature: `has_pointer` and `is_null` checks, and the panic-mode
+  extractions `pointer("/a/0")`, `str()`, `i64()`, `u64()`, `f64()`, `bool()`, `array()`, and `object()`, which continue
+  with the selected content. JSON objects implement `Map` and `MapLookup`, so map assertions apply to them. The
+  `matchers::json` namespace holds the expectations.
 - `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
   failure reports the matching elements.
 
