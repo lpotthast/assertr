@@ -16,8 +16,9 @@
 //!
 //! Unit values such as [`IsSome`] need no arguments. Others take their expected values in
 //! `Type::new(..)`, and short functions build the same types: `ge(18)` is
-//! [`GreaterOrEqual::new(18)`](GreaterOrEqual::new). Pass `&matcher` to use one definition several
-//! times:
+//! [`GreaterOrEqual::new(18)`](GreaterOrEqual::new), and `string::contains("x")` is
+//! [`string::Contains::new("x")`](string::Contains::new). Pass `&matcher` to use one definition
+//! several times:
 //!
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, IsSome, string}, prelude::*};
@@ -53,7 +54,7 @@
 //!
 //! | Subject or check | Matchers |
 //! |---|---|
-//! | Equality and ordering | [`eq`], [`EqualTo`], [`NotEqualTo`], [`one_of`], [`lt`], [`le`], [`gt`], [`ge`], and their types |
+//! | Equality and ordering | [`eq`], [`ne`], [`one_of`], [`lt`], [`le`], [`gt`], [`ge`], and their types such as [`EqualTo`] and [`NotEqualTo`] |
 //! | Tolerance | [`close_to`], [`IsCloseTo`] for numbers and durations implementing [`NumericDistance`](crate::assertions::NumericDistance) |
 //! | Booleans, variants, and types | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`], [`HasPanicMessage`] |
 //! | Length, formatting, and identity | [`HasLengthOf`], [`IsEmpty`], [`IsNotEmpty`], [`HasDebugString`], [`HasDebugValue`], [`HasDisplayValue`], [`IsSameInstanceAs`], [`IsNotSameInstanceAs`] |
@@ -66,9 +67,10 @@
 //! | Paths, commands, and mutexes (`std`) | `path`, `command`, `mutex` |
 //! | HTTP (`http`, `reqwest`) | `header_value`, `response` |
 //! | Jiff (`jiff`) | `signed_duration`, `span`, `zoned` |
+//! | JSON values (`serde-json`) | `json` |
 //! | Programs and reports (`program`, `rootcause`) | `program`, `report` |
 //! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
-//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
+//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`each_in_any_order`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`showing_actual`], [`anything`] |
 //!
 //! Each matcher's page lists the subjects it supports and what it needs to render a failure. This
 //! module is the public home of these types. Import `matchers::*` next to `prelude::*` if you want
@@ -164,7 +166,8 @@
 //!
 //! | Matcher | Passes when |
 //! |---|---|
-//! | [`each(matcher)`](each) | Every element matches. An empty collection passes. |
+//! | [`each(matcher)`](each) | Every element matches. An empty collection passes. Failures name positions. Requires [`StableOrder`](crate::assertions::StableOrder). |
+//! | [`each_in_any_order(matcher)`](each_in_any_order) | Every element matches, without positions, for any collection. |
 //! | [`elements_are!`](crate::elements_are) | The elements match these matchers one to one, in order. Requires [`StableOrder`](crate::assertions::StableOrder). |
 //! | [`elements_are_in_any_order!`](crate::elements_are_in_any_order) | The elements match these matchers one to one, in any order. |
 //! | [`entries_are!`](crate::entries_are) | The map has exactly these keys, and each value matches its matcher. |
@@ -204,7 +207,8 @@
 //!
 //! Equality and ordering accept the expected value owned or borrowed, so `eq("hello")` matches both
 //! a `String` and a `&str`. A subject that is a reference keeps its type. Use [`dereferenced`] to
-//! match what a reference, `Box`, `String`, or other `Deref` type points to.
+//! match what a reference, `Box`, `String`, or other `Deref` type points to. `partial!` needs no
+//! adapter, because it matches any subject that borrows its pattern's type.
 //!
 //! Matching borrows the subject. A rendering budget shortens the report but never changes the
 //! result. Matchers can have side effects, since predicates, callbacks, and lock checks run user
@@ -257,12 +261,13 @@ pub use crate::assertions::{
 pub use crate::{
     assertions::{
         collection::{
-            ContainsMatching, DoesNotContainMatching, Each, ElementsAre, ElementsAreInAnyOrder,
-            contains_contiguous_elements, contains_matching, does_not_contain_matching, each,
-            elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
+            ContainsMatching, DoesNotContainMatching, Each, EachInAnyOrder, ElementsAre,
+            ElementsAreInAnyOrder, contains_contiguous_elements, contains_matching,
+            does_not_contain_matching, each, each_in_any_order, elements_are,
+            elements_are_in_any_order, ends_with_elements, starts_with_elements,
         },
         core::{
-            partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, one_of},
+            partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, ne, one_of},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
         distance::{CloseToRejection, IsCloseTo, close_to},
@@ -276,6 +281,7 @@ pub use crate::{
         field::{Field, field},
         predicate::{Predicate, predicate},
         satisfying::{Satisfying, satisfying},
+        showing_actual::{ShowingActual, showing_actual},
     },
 };
 
@@ -288,11 +294,33 @@ pub mod character {
 }
 
 /// String contents, prefixes, suffixes, and whitespace expectations.
+///
+/// Short functions such as [`contains`](crate::matchers::string::contains) build the matchers that
+/// take an operand. They know their subject is a string, so they work where a `satisfying` callback
+/// cannot tell a string's `contains` from a collection's, for example in a `partial!` field:
+///
+/// ```rust
+/// # #[cfg(feature = "partial")]
+/// # {
+/// use assertr::{matchers::{all_of, string}, prelude::*};
+///
+/// struct Failure {
+///     message: String,
+/// }
+///
+/// let failure = Failure { message: String::from("boom: config missing") };
+/// assert_that!(failure).matches(partial!(Failure {
+///     message: all_of(matchers![string::starts_with("boom"), string::contains("config")]),
+/// }));
+/// # }
+/// ```
 pub mod string {
     #[doc(inline)]
     pub use crate::assertions::core::string::{
-        Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
-        EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith,
+        Contains, ContainsOccurrences, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
+        EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith, contains,
+        contains_occurrences, does_not_contain, does_not_end_with, does_not_start_with, ends_with,
+        equal_to_ignoring_ascii_case, starts_with,
     };
 }
 
@@ -301,10 +329,11 @@ pub mod string {
 pub mod collection {
     #[doc(inline)]
     pub use crate::assertions::collection::{
-        Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-        ContainsExactlySameInstances, ContainsExactlySameInstancesInAnyOrder,
-        ContainsSameInstanceAs, DoesNotContain, DoesNotContainSameInstanceAs, EndsWith,
-        ExactElementsRejection, ExactIdentityRejection, HasElementAt, HasFirst, HasLast, HasSingle,
+        Contains, ContainsAll, ContainsAnyOf, ContainsContiguous, ContainsExactly,
+        ContainsExactlyInAnyOrder, ContainsExactlySameInstances,
+        ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs, DoesNotContain,
+        DoesNotContainAnyOf, DoesNotContainSameInstanceAs, EndsWith, ExactElementsRejection,
+        ExactIdentityRejection, HasCountMatching, HasElementAt, HasFirst, HasLast, HasSingle,
         IdentityMembershipRejection, MissingElementsRejection, PositionalRejection, StartsWith,
         UnorderedIdentityRejection,
     };
@@ -314,9 +343,9 @@ pub mod collection {
 pub mod map {
     #[doc(inline)]
     pub use crate::assertions::map::{
-        ContainsEntry, ContainsEntryMatching, ContainsExactlyEntries, ContainsKey, ContainsKeys,
-        ContainsValue, ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey,
-        DoesNotContainValue, ExactEntriesRejection,
+        ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
+        ContainsValueMatching, DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue,
+        ExactEntriesRejection,
     };
 }
 
@@ -363,11 +392,11 @@ pub mod numeric {
     };
 }
 
-/// Command argument expectations. Requires `std`.
+/// Command program, argument, and environment expectations. Requires `std`.
 #[cfg(feature = "std")]
 pub mod command {
     #[doc(inline)]
-    pub use crate::assertions::std::command::HasArg;
+    pub use crate::assertions::std::command::{DoesNotHaveArg, HasArg, HasEnv, HasProgram};
 }
 
 /// Drop-requirement expectations.
@@ -445,13 +474,23 @@ pub mod response {
     };
 }
 
+/// JSON pointer and value kind expectations. Requires `serde-json`.
+#[cfg(feature = "serde-json")]
+pub mod json {
+    #[doc(inline)]
+    pub use crate::assertions::json::{
+        HasPointer, IsArray, IsBool, IsF64, IsI64, IsNull, IsObject, IsString, IsU64,
+    };
+}
+
 /// Report context, attachment, and child expectations. Requires `rootcause`.
 #[cfg(feature = "rootcause")]
 pub mod report {
     #[doc(inline)]
     pub use crate::assertions::rootcause::report::{
-        HasAttachmentCount, HasChildCount, HasCurrentContext, HasCurrentContextDebugString,
-        HasCurrentContextDisplayValue, HasCurrentContextType,
+        CurrentContext, DoesNotHaveCurrentContextType, HasAttachmentCount, HasChildCount,
+        HasCurrentContext, HasCurrentContextDebugString, HasCurrentContextDisplayValue,
+        HasCurrentContextType, current_context,
     };
 }
 

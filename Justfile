@@ -1,7 +1,7 @@
 # Every feature of the `assertr` crate, checked one at a time by `check-each-feature` and
 # friends. Cargo unifies features across a single invocation, so an integration that silently
 # depends on another feature only shows up when it is the only feature enabled.
-features := "fluent http jiff libm num partial program reqwest rootcause serde serde-json serde-toml std thirtyfour thirtyfour-cdp tokio"
+features := "fluent http jiff libm num partial program reqwest rootcause serde serde-json serde-toml std thirtyfour thirtyfour-cdp tokio tokio-process"
 
 # Lists all available commands.
 list:

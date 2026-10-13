@@ -3,8 +3,7 @@
 use core::num::Wrapping;
 
 use crate::{
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::ValueRenderer,
 };
@@ -202,8 +201,12 @@ pub enum CloseToRejection<'a, T> {
     },
 }
 
-impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R: ValueRenderer<T>>
-    Expectation<T, R> for IsCloseTo<E, D>
+impl<
+    T: NumericDistance,
+    E: ExpectedOperand<T, View = T>,
+    D: ExpectedOperand<T, View = T>,
+    R: ValueRenderer<T>,
+> Expectation<T, R> for IsCloseTo<E, D>
 {
     type Success<'a>
         = ()
@@ -221,8 +224,8 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         actual: &'a T,
         _: &AssertionContext<'_, R>,
     ) -> Result<(), Self::Rejection<'a>> {
-        let expected = borrow_for::<T, _>(&self.expected);
-        let allowed_deviation = borrow_for::<T, _>(&self.allowed_deviation);
+        let expected = operand_view::<T, _>(&self.expected);
+        let allowed_deviation = operand_view::<T, _>(&self.allowed_deviation);
         // A NaN deviation is incomparable with zero and therefore invalid, like a negative one.
         if !allowed_deviation.ge(&T::zero_distance()) {
             return Err(CloseToRejection::InvalidDeviation { allowed_deviation });
@@ -257,8 +260,8 @@ impl<T: NumericDistance, E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>, R
         match rejected {
             None => failure
                 .relation("is close to")
-                .expected(render.value(borrow_for::<T, _>(&self.expected)))
-                .fact(allowed(borrow_for::<T, _>(&self.allowed_deviation))),
+                .expected(render.value(operand_view::<T, _>(&self.expected)))
+                .fact(allowed(operand_view::<T, _>(&self.allowed_deviation))),
             Some((_, CloseToRejection::InvalidDeviation { allowed_deviation })) => failure
                 .relation("was given an invalid allowed deviation")
                 .fact(allowed(allowed_deviation))

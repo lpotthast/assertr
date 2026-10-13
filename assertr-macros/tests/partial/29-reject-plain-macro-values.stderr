@@ -8,6 +8,7 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
   |
   = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+  = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`
@@ -15,8 +16,8 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `Anything` implements `Expectation<A, R>`
             `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
+            `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-            `ContainsElement<B, E>` implements `Expectation<Range, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAre<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
@@ -36,6 +37,7 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
   |
   = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+  = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`
@@ -43,8 +45,8 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `Anything` implements `Expectation<A, R>`
             `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
+            `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-            `ContainsElement<B, E>` implements `Expectation<Range, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
   = note: required for `ElementsAreInAnyOrder<assertr::__private::Cons<{integer}, assertr::__private::Nil>>` to implement `Expectation<[{integer}; 1]>`
@@ -64,6 +66,7 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
   |
   = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+  = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`
@@ -71,8 +74,8 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `Anything` implements `Expectation<A, R>`
             `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
+            `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-            `ContainsElement<B, E>` implements `Expectation<Range, R>`
           and $N others
   = note: required for `assertr::__private::Cons<{integer}, assertr::__private::Nil>` to implement `MatcherList<{integer}>`
 note: required by a bound in `assertr::assertions::StableOrderAssertions::contains_exactly_matching`
@@ -94,6 +97,7 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
   |
   = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+  = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`
@@ -101,8 +105,8 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
             `Anything` implements `Expectation<A, R>`
             `Box<D>` implements `Expectation<T, R>`
             `ContainsAll<E, B>` implements `Expectation<C, R>`
+            `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
             `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-            `ContainsElement<B, E>` implements `Expectation<Range, R>`
           and $N others
   = note: required for `assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>` to implement `EntryMatcherList<BTreeMap<&str, {integer}>>`
   = note: required for `EntriesAre<assertr::__private::Cons<assertr::matchers::Entry<&str, {integer}>, assertr::__private::Nil>>` to implement `Expectation<BTreeMap<&str, {integer}>>`

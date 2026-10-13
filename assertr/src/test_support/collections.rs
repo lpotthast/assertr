@@ -29,8 +29,8 @@ impl Collection for UnorderedSet {
 }
 
 impl SetLookup for UnorderedSet {
-    fn contains_element(&self, element: &i32) -> bool {
-        self.0.contains(element)
+    fn get_element(&self, element: &i32) -> Option<&i32> {
+        self.0.iter().find(|it| *it == element)
     }
 }
 

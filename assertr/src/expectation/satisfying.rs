@@ -54,8 +54,12 @@ impl<F> core::fmt::Debug for Satisfying<F> {
 ///
 /// # Type inference
 ///
-/// If several assertion traits provide the same method, such as `contains`, annotate the closure
-/// parameter so Rust can select the assertion family:
+/// Rust checks the closure before it knows which value the matcher will receive, so the closure's
+/// subject type is still unknown inside it. A method that only one assertion trait provides works
+/// anyway. A method that several traits provide, such as `contains` on strings, collections, and
+/// iterators, fails with `E0034` ("multiple applicable items in scope"). Prefer a matcher that
+/// already knows its subject, such as [`string::contains`](crate::matchers::string::contains),
+/// or annotate the closure parameter so Rust can select the assertion family:
 ///
 /// ```rust
 /// use assertr::prelude::*;
@@ -150,7 +154,8 @@ mod tests {
 
                   Actual: 1
 
-              - Expected: 3
+              - Projection: `.derive_owned(..)`
+                Expected: 3
 
                   Actual: 2
             -------- assertr --------

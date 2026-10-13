@@ -12,8 +12,7 @@ use super::{
 };
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
-    expectation::{AssertionContext, Expectation, lists::SatisfyingList},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, lists::SatisfyingList},
     failure::{FailureBuilder, FailureKind},
     mode::{Capture, Panic},
     renderer::{DebugRenderer, ValueRenderer},
@@ -21,19 +20,20 @@ use crate::{
 
 /// Assertions over the elements of a collection whose order is stable and meaningful.
 ///
-/// This trait is implemented only for [`StableOrder`] subjects. A call on a set reports the missing
-/// capability and recommends `contains_exactly_in_any_order`.
+/// This trait is implemented only for [`StableOrder`] subjects, which include lists and sorted
+/// sets such as `BTreeSet`. Collections that iterate in an unspecified order, such as a `HashSet`,
+/// use the order-free `contains_exactly_in_any_order` instead.
 ///
 /// The restriction is part of the trait implementation, not merely individual method bodies, so a
-/// set cannot satisfy a generic `StableOrderAssertions` bound:
+/// hash set cannot satisfy a generic `StableOrderAssertions` bound:
 ///
 /// ```compile_fail,E0277
-/// use std::collections::BTreeSet;
+/// use std::collections::HashSet;
 /// use assertr::prelude::*;
 ///
 /// fn requires_stable_order<A: StableOrderAssertions<i32, DebugRenderer>>(_assertion: A) {}
 ///
-/// requires_stable_order(assert_that!(BTreeSet::from([1, 2, 3])));
+/// requires_stable_order(assert_that!(HashSet::from([1, 2, 3])));
 /// ```
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
@@ -61,12 +61,12 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     ///
     /// Order-free collections cannot use this positional assertion:
     ///
-    /// ```compile_fail,E0277
+    /// ```compile_fail,E0599
     /// use assertr::prelude::*;
-    /// use std::collections::BTreeSet;
+    /// use std::collections::HashSet;
     ///
     /// let values = [1, 2];
-    /// assert_that!(BTreeSet::from([&values[0], &values[1]]))
+    /// assert_that!(HashSet::from([&values[0], &values[1]]))
     ///     .contains_exactly_same_instances([&values[0], &values[1]]);
     /// ```
     fn contains_exactly_same_instances<'e, U: ?Sized + 'e>(
@@ -81,7 +81,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's prefix matches the expected matcher list in order.
@@ -105,7 +105,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's suffix matches the expected matcher list in order.
@@ -129,7 +129,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
@@ -151,13 +151,13 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
 
     /// Asserts positional equality with `expected`, including length.
     ///
-    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
-    /// collection item type `T`. Arrays, slices, and vectors supply the expected list through
-    /// `AsRef<[E]>`.
+    /// Each expected element `E` selects a borrowed view through
+    /// [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared collection item type `T`.
+    /// Arrays, slices, and vectors supply the expected list through `AsRef<[E]>`.
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that each element matches the constraint at the same position, including length.
@@ -201,7 +201,7 @@ where
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.matches(value::StartsWith::new(expected))
@@ -229,7 +229,7 @@ where
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.matches(value::EndsWith::new(expected))
@@ -257,7 +257,7 @@ where
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsContiguous::new(expected))
@@ -287,7 +287,7 @@ where
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsExactly::new(expected))
@@ -398,13 +398,13 @@ where
 /// A failed extraction cannot produce an element, so the family is intentionally unavailable in
 /// capture mode.
 ///
-/// Unordered collections do not expose first or last elements:
+/// Collections with an unspecified iteration order do not expose first or last elements:
 ///
 /// ```compile_fail,E0599
 /// use assertr::prelude::*;
-/// use std::collections::BTreeSet;
+/// use std::collections::HashSet;
 ///
-/// assert_that!(BTreeSet::from([1, 2, 3])).first();
+/// assert_that!(HashSet::from([1, 2, 3])).first();
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderExtractAssertions<'t, T, R = DebugRenderer> {
@@ -429,7 +429,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
     {
         let element = self.require(&HasFirst);
-        self.derive(|_| element)
+        self.derive_as("first()", |_| element)
     }
 
     #[track_caller]
@@ -438,7 +438,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
     {
         let element = self.require(&HasLast);
-        self.derive(|_| element)
+        self.derive_as("last()", |_| element)
     }
 }
 

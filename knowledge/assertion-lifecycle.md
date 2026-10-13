@@ -69,10 +69,14 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 
 | Operation                                       | State and metadata                                                                                                          | Renderer                 |
 |-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|--------------------------|
-| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression.                                                                   | Moved, no `Clone` bound. |
-| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression.                                 | Cloned.                  |
+| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression. Record the projection. | Moved, no `Clone` bound. |
+| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages, name, and expression. Record the projection. | Cloned.                  |
 | `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain. Locate its failures at the outermost `satisfies` call. | Cloned for child.        |
 
+- Each mapping, derivation, and extraction appends a projection, such as `err()` or `derive(..)`, so failures show how
+  their subject was reached from the expression: a `Projection:` line, such as `.err().current_context()`, follows the
+  `Expression:` line. Built-in extractions record their own method name. An execution adapter records its projection
+  only after its own check passed, so that check's failure still describes the original subject.
 - `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` moves an owned subject into its mapper and clones only a
   borrowed one.
   `map_async` awaits a new owned subject.
@@ -93,7 +97,9 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 | JSON/TOML conversion                                   | Serialize the borrowed subject once, map to owned `Result<String, Error>` in either mode. Errors remain `Err` for later checks. This transformation counts no assertion. |
 
 For example, program existence retains its subject, while resolved-path extraction promises a `PathBuf`. Type checks and
-extractions on erased boxes, panic payloads, and rootcause contexts use the same distinction. Owned payloads can
+extractions on erased boxes, panic payloads, and dynamic rootcause contexts use the same distinction. A typed rootcause
+report always has a context of its declared type, so its `current_context` projection cannot fail and works in every
+mode. Owned payloads can
 transfer
 ownership. Borrowed payloads remain borrowed. Message extraction with `message` always yields an owned `String`: it
 moves an owned `String` payload and copies a `&str` payload or a borrowed message.

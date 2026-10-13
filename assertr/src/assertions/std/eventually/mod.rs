@@ -1462,7 +1462,7 @@ mod tests {
                 let observe = || {
                     calls.set(calls.get() + 1);
                     core::future::ready(if calls.get() < 2 {
-                        Err("not yet")
+                        Err::<u32, _>("not yet")
                     } else {
                         Err("gone")
                     })

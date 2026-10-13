@@ -3,7 +3,7 @@ use core::cmp::Ordering;
 use super::partial_eq::operand_expectation;
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
+    expectation::ExpectedOperand,
     renderer::{DebugRenderer, ValueRenderer},
 };
 
@@ -42,7 +42,7 @@ macro_rules! ordering_expectation {
         operand_expectation! {
             impl [T: ?Sized, E, R] for $name<E>, subject T, where [
                 T: PartialOrd<E::View>,
-                E: BorrowFor<T>,
+                E: ExpectedOperand<T>,
                 R: ValueRenderer<T> + ValueRenderer<E::View>,
             ];
             borrow expected for T, view E::View;
@@ -143,9 +143,9 @@ ordering_expectation! {
 
 /// Assertions for partially ordered values.
 ///
-/// Expected values use [`BorrowFor`], with `PartialOrd` and renderer support for the selected
-/// view. `String` has no `PartialOrd<str>` implementation, so compare two strings or two string
-/// views:
+/// Expected values use [`BorrowFor`](crate::borrow_for::BorrowFor), with `PartialOrd` and renderer
+/// support for the selected view. `String` has no `PartialOrd<str>` implementation, so compare two
+/// strings or two string views:
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -186,28 +186,28 @@ pub trait PartialOrdAssertions<T, R = DebugRenderer> {
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>;
+        E: ExpectedOperand<T>;
 
     /// Asserts that the subject is strictly greater than `expected`.
     fn is_greater_than<E>(self, expected: E) -> Self
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>;
+        E: ExpectedOperand<T>;
 
     /// Asserts that the subject is less than or equal to `expected`.
     fn is_less_or_equal_to<E>(self, expected: E) -> Self
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>;
+        E: ExpectedOperand<T>;
 
     /// Asserts that the subject is greater than or equal to `expected`.
     fn is_greater_or_equal_to<E>(self, expected: E) -> Self
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>;
+        E: ExpectedOperand<T>;
 }
 
 impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
@@ -216,7 +216,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
     {
         self.matches(LessThan::new(expected))
     }
@@ -226,7 +226,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
     {
         self.matches(GreaterThan::new(expected))
     }
@@ -236,7 +236,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
     {
         self.matches(LessOrEqual::new(expected))
     }
@@ -246,7 +246,7 @@ impl<T, M: Mode, R> PartialOrdAssertions<T, R> for AssertThat<'_, T, M, R> {
     where
         R: ValueRenderer<T> + ValueRenderer<E::View>,
         T: PartialOrd<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
     {
         self.matches(GreaterOrEqual::new(expected))
     }

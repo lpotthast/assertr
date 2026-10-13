@@ -38,7 +38,8 @@
 //! Counts and lengths are values too. Assertions that report them need `ValueRenderer<usize>`.
 //! Errors keep their own type, so a custom renderer can show errors that implement neither `Debug`
 //! nor `Display`. There is no fallback. If a method needs a renderer that is missing, it does not
-//! compile.
+//! compile. Wrap a value that cannot be rendered and that the test is not about, such as the `Ok`
+//! value of a result expected to be an error, in [`Opaque`] to show its type name instead.
 //!
 //! A check that never shows a value needs no renderer for it. Here, neither `Secret` nor the array
 //! can be rendered, and the assertion still compiles:
@@ -139,6 +140,7 @@
 
 mod budget;
 mod context;
+mod opaque;
 mod presentation;
 mod rendered;
 mod value;
@@ -146,6 +148,7 @@ mod value;
 pub use budget::RenderingBudget;
 pub use context::RenderingContext;
 pub(crate) use context::omission;
+pub use opaque::Opaque;
 pub use presentation::{CollectionPresentation, GroupStyle, RenderingOrder};
 pub use rendered::{Rendered, RenderedBody};
 pub use value::{CustomRenderer, DebugRenderer, ValueRenderer};

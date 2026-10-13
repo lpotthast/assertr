@@ -3,8 +3,7 @@ use core::marker::PhantomData;
 
 use crate::{
     AssertThat, Mode,
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation, passed},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, RenderingOrder, ValueRenderer},
 };
@@ -47,7 +46,7 @@ macro_rules! operand_expectation {
                 $actual: &'a $subject,
                 _: &$crate::expectation::AssertionContext<'_, R>,
             ) -> Result<(), &'a $view> {
-                let $expected = $crate::borrow_for::borrow_for::<$target, _>(&self.$field);
+                let $expected = $crate::expectation::operand_view::<$target, _>(&self.$field);
                 operand_expectation!(@outcome $role, $holds, $expected)
             }
 
@@ -63,7 +62,7 @@ macro_rules! operand_expectation {
                 let (failure, operand) = match rejected {
                     None => (
                         failure.relation($relation),
-                        $crate::borrow_for::borrow_for::<$target, _>(&self.$field),
+                        $crate::expectation::operand_view::<$target, _>(&self.$field),
                     ),
                     Some(($rendered, operand)) => (
                         failure.actual($render_actual)$(.relation($rejection))?,
@@ -84,7 +83,8 @@ macro_rules! operand_expectation {
 
 pub(crate) use operand_expectation;
 
-/// Reusable equality with an owned or borrowed expected value, selected through [`BorrowFor`].
+/// Reusable equality with an owned or borrowed expected value, selected through
+/// [`BorrowFor`](crate::borrow_for::BorrowFor).
 ///
 /// [`PartialEqAssertions::is_equal_to`] executes this same definition.
 ///
@@ -142,6 +142,21 @@ impl<E> NotEqualTo<E> {
     }
 }
 
+/// Matches values not equal to `unexpected` through the actual value's `PartialEq`
+/// implementation.
+///
+/// This is a convenience constructor for [`NotEqualTo::new`].
+///
+/// ```
+/// use assertr::{matchers::ne, prelude::*};
+///
+/// assert_that!([String::from("hello")]).matches(elements_are![ne("bye")]);
+/// ```
+#[must_use]
+pub const fn ne<E>(unexpected: E) -> NotEqualTo<E> {
+    NotEqualTo::new(unexpected)
+}
+
 /// Matches a subject equal to one of the listed values: an array, slice, or vector whose
 /// elements are compared like [`eq`]'s operand, so `&str` candidates match a `String` subject.
 ///
@@ -178,7 +193,7 @@ pub const fn one_of<E, B: AsRef<[E]>>(candidates: B) -> IsOneOf<E, B> {
 impl<T: ?Sized, E, B, R> Expectation<T, R> for IsOneOf<E, B>
 where
     T: PartialEq<E::View>,
-    E: BorrowFor<T>,
+    E: ExpectedOperand<T>,
     B: AsRef<[E]>,
     R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
@@ -196,7 +211,7 @@ where
     const KIND: FailureKind = FailureKind::Equality;
 
     fn evaluate<'a>(&'a self, actual: &'a T, _: &AssertionContext<'_, R>) -> Result<(), ()> {
-        let mut candidates = self.expected.as_ref().iter().map(borrow_for::<T, _>);
+        let mut candidates = self.expected.as_ref().iter().map(operand_view::<T, _>);
         passed(candidates.any(|candidate| actual.eq(candidate)))
     }
 
@@ -210,7 +225,7 @@ where
             .expected
             .as_ref()
             .iter()
-            .map(borrow_for::<T, _>)
+            .map(operand_view::<T, _>)
             .collect::<Vec<_>>();
         let candidates = context
             .render()
@@ -228,7 +243,7 @@ where
 operand_expectation! {
     impl [T: ?Sized, E, R] for EqualTo<E>, subject T, where [
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     ];
     borrow 0 for T, view E::View;
@@ -241,7 +256,7 @@ operand_expectation! {
 operand_expectation! {
     impl [T: ?Sized, E, R] for NotEqualTo<E>, subject T, where [
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     ];
     borrow 0 for T, view E::View;
@@ -253,8 +268,8 @@ operand_expectation! {
 
 /// Equality and inequality assertions using [`PartialEq`].
 ///
-/// Expected values can be owned or borrowed. [`BorrowFor`] selects their borrowed type,
-/// allowing string literals to compare with `String` without allocation.
+/// Expected values can be owned or borrowed. [`BorrowFor`](crate::borrow_for::BorrowFor) selects
+/// their borrowed type, allowing string literals to compare with `String` without allocation.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -264,8 +279,9 @@ operand_expectation! {
 /// assert_that!(actual).is_equal_to("hello");
 /// ```
 ///
-/// Custom cross-type comparisons require a [`BorrowFor`] implementation or an explicit view,
-/// predicate, or custom expectation. `PartialEq` alone is insufficient:
+/// Custom cross-type comparisons require a [`BorrowFor`](crate::borrow_for::BorrowFor)
+/// implementation or an explicit view, predicate, or custom expectation. `PartialEq` alone is
+/// insufficient:
 ///
 /// ```compile_fail
 /// use assertr::prelude::*;
@@ -305,14 +321,14 @@ pub trait PartialEqAssertions<T, R = DebugRenderer> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that the subject does not equal the value borrowed from `expected`.
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that the subject equals one of `candidates`, an array, slice, or vector whose
@@ -320,7 +336,7 @@ pub trait PartialEqAssertions<T, R = DebugRenderer> {
     fn is_one_of<E>(self, candidates: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 }
 
@@ -329,7 +345,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_equal_to<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
         self.matches(EqualTo::new(expected))
@@ -339,7 +355,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_not_equal_to<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
         self.matches(NotEqualTo::new(expected))
@@ -349,7 +365,7 @@ impl<T, M: Mode, R> PartialEqAssertions<T, R> for AssertThat<'_, T, M, R> {
     fn is_one_of<E>(self, candidates: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
         self.matches(IsOneOf::new(candidates))
@@ -576,6 +592,45 @@ mod tests {
         }
     }
 
+    mod ne {
+        use indoc::formatdoc;
+
+        use crate::{
+            matchers::{each, ne},
+            prelude::*,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(String::from("a")), matches(ne("a")));
+        }
+
+        #[test]
+        fn matches_unequal_values_with_borrowed_operands() {
+            assert_that!([String::from("a"), String::from("b")]).matches(each(ne("c")));
+        }
+
+        #[test]
+        fn reports_the_unexpectedly_equal_value() {
+            assert_that!(|| {
+                assert_that!(3).with_location(false).matches(ne(3));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                -------- assertr --------
+                Expression: `3`
+
+                Actual: 3
+
+                is equal to
+
+                Unexpected: 3
+                -------- assertr --------
+            "});
+        }
+    }
+
     mod is_one_of {
         use indoc::formatdoc;
 
@@ -636,6 +691,34 @@ mod tests {
 
         fn point() -> Point {
             Point { x: 1, y: 2 }
+        }
+
+        #[cfg(feature = "std")]
+        #[test]
+        fn os_strings_compare_with_string_literals() {
+            use std::ffi::{OsStr, OsString};
+
+            assert_that!(OsStr::new("cargo")).is_equal_to("cargo");
+            assert_that!(OsString::from("cargo"))
+                .is_equal_to("cargo")
+                .is_not_equal_to("rustc");
+            assert_that!([OsStr::new("build"), OsStr::new("--locked")])
+                .contains_exactly(["build", "--locked"]);
+        }
+
+        #[cfg(feature = "serde-json")]
+        #[test]
+        fn json_values_compare_with_strings_numbers_and_booleans() {
+            use serde_json::json;
+
+            assert_that!(json!("Ada"))
+                .is_equal_to("Ada")
+                .is_equal_to(String::from("Ada"))
+                .is_not_equal_to(1);
+            assert_that!(json!(36)).is_equal_to(36).is_equal_to(36_u64);
+            assert_that!(json!(true)).is_equal_to(true);
+            assert_that!(vec![json!("reader"), json!("editor")])
+                .contains_exactly(["reader", "editor"]);
         }
 
         #[test]

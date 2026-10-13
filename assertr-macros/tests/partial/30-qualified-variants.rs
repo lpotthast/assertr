@@ -68,10 +68,11 @@ fn main() {
         PathSegment::Variant("core::option::Option::Some"),
         PathSegment::TupleIndex(0),
     ]);
+    // A mismatched variant rejects the subject itself, naming the expected constructor.
     let failures = assert_that!(Message::Tuple(3))
         .capture(|it| it.matches(partial!(variant crate::Message::Unit)));
-    assert_that!(failures[0].children[0].path)
-        .contains_exactly([PathSegment::Variant("crate::Message::Unit")]);
+    assert_that!(&failures[0].children[0].path).is_empty();
+    assert_that!(failures[0].to_string()).contains("Expected: crate::Message::Unit");
 
     // The raw identifier escapes the marker when the constructor's module is named variant.
     assert_that!(variant::Value(3)).matches(partial!(r#variant::Value(eq(3))));

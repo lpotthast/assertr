@@ -30,6 +30,7 @@ explain a failure, so they retain the values and observations needed for diagnos
 | `contains_all` | Stop when all expected values have matched or the input ends. An empty expected list consumes nothing. |
 | `is_exhausted`, `is_not_exhausted` | Call `next()` once. |
 | `has_count` | Use an exact `size_hint` only to reject a mismatch without consuming. Otherwise, including when the hint agrees, consume at most the expected count plus one. Report an exact count if the input ends, or a lower bound otherwise. |
+| `has_count_matching` | Probe each element until the input ends or one more than the expected count matched. Record the matching elements at their yield positions. Report an exact count if the input ends, or a lower bound otherwise. |
 | Empty prefix, suffix, or contiguous pattern | Consume nothing. |
 | Prefix and positional exact equality | Compare each visited pair once and stop at the first mismatch. Exact matching reads at most the expected length plus one. |
 | Nonempty suffix | Read to the end, then compare every required position. Distinguish input that is too short from unequal values. |

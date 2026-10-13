@@ -32,7 +32,15 @@ subject, item, key, value, or range-bound type. Assertr does not infer a separat
 therefore select different views when used with different subject types.
 
 The `borrow-for` crate defines the standard selections and lets custom wrappers provide their own. Assertr re-exports it as
-`assertr::borrow_for`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
+`assertr::borrow_for`. Public bounds name `ExpectedOperand<A>` instead of `BorrowFor<A>`. Its only implementation is a
+blanket one over every `BorrowFor<A>` operand, marked `#[diagnostic::do_not_recommend]`, so a rejected operand reports
+assertr's explanation and alternatives instead of a list of unrelated `BorrowFor` implementations. Custom operands still
+implement `BorrowFor`.
+
+`borrow-for` also selects `str` views for string literals in `OsStr`, `OsString`, and `&OsStr` contexts, and with assertr's
+`serde-json` feature, scalar views in `serde_json::Value` contexts. Every additional context for an operand type weakens
+inference: an expected `1_u32` cannot determine an otherwise unconstrained subject type once it is comparable with both
+`u32` and `Value`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
 and wrapper implementations.
 
 | Check                                                          | Required comparison                                                                                   |
@@ -44,6 +52,8 @@ and wrapper implementations.
 
 Scalar expectations can evaluate unsized `str` and slices directly. Subjects, fields, and items that are references keep
 their declared types. Use `dereferenced` to check the value behind a reference, box, `String`, or other `Deref` value.
+`partial!` is the exception: its pattern fixes the matched type, and it accepts every subject that implements `Borrow` of
+that type, such as a reference or box.
 Chain storage follows [entry normalization](assertion-lifecycle.md#entry-subject-ownership-and-mode). Generic `.into()`,
 `Default::default()`, and empty expected lists may need explicit types.
 

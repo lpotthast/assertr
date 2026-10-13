@@ -149,7 +149,7 @@ impl<'t, 'a, R> ProgramExtractAssertions<'t, 'a, R> for AssertThat<'t, Program<'
         R: ValueRenderer<Program<'a>> + ValueRenderer<which::Error>,
     {
         let path = self.require(&Exists);
-        self.map(|_| Actual::Owned(path))
+        self.map_as("resolved_path()", |_| Actual::Owned(path))
     }
 }
 

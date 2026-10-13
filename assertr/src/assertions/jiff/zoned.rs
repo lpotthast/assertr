@@ -2,8 +2,7 @@ use jiff::{Zoned, tz::TimeZone};
 
 use crate::{
     AssertThat,
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view},
     failure::{Fact, FailureBuilder, FailureKind},
     mode::Mode,
     renderer::{DebugRenderer, ValueRenderer},
@@ -37,7 +36,8 @@ where
 
 /// Compares the observed time-zone rules with an expected [`TimeZone`].
 ///
-/// The expected operand selects a `TimeZone` view through [`BorrowFor`].
+/// The expected operand selects a `TimeZone` view through
+/// [`BorrowFor`](crate::borrow_for::BorrowFor).
 #[derive(Debug, Clone)]
 pub struct IsInTimeZone<E>(E);
 
@@ -51,7 +51,7 @@ impl<E> IsInTimeZone<E> {
 
 impl<E, R> Expectation<Zoned, R> for IsInTimeZone<E>
 where
-    E: BorrowFor<TimeZone, View = TimeZone>,
+    E: ExpectedOperand<TimeZone, View = TimeZone>,
     R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
 {
     type Success<'a>
@@ -70,7 +70,7 @@ where
         actual: &'a Zoned,
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<TimeZone, _>(&self.0);
+        let expected = operand_view::<TimeZone, _>(&self.0);
         let actual = actual.time_zone();
         if actual == expected {
             Ok(())
@@ -88,7 +88,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         let expected = rejected.map_or_else(
-            || borrow_for::<TimeZone, _>(&self.0),
+            || operand_view::<TimeZone, _>(&self.0),
             |(_, (_, expected))| expected,
         );
         explain_time_zone(expected, rejected, failure, context)
@@ -162,7 +162,7 @@ pub trait ZonedAssertions<R = DebugRenderer> {
     /// its rules. Zones with identical rules from different sources can differ, for example
     /// `TimeZone::get("Etc/UTC")` and `TimeZone::UTC`. Use
     /// [`is_in_time_zone_named`](Self::is_in_time_zone_named) to compare IANA names instead.
-    fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
+    fn is_in_time_zone<E: ExpectedOperand<TimeZone, View = TimeZone>>(self, expected: E) -> Self
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>;
 
@@ -176,7 +176,7 @@ pub trait ZonedAssertions<R = DebugRenderer> {
 
 impl<M: Mode, R> ZonedAssertions<R> for AssertThat<'_, Zoned, M, R> {
     #[track_caller]
-    fn is_in_time_zone<E: BorrowFor<TimeZone, View = TimeZone>>(self, expected: E) -> Self
+    fn is_in_time_zone<E: ExpectedOperand<TimeZone, View = TimeZone>>(self, expected: E) -> Self
     where
         R: ValueRenderer<Zoned> + ValueRenderer<TimeZone>,
     {

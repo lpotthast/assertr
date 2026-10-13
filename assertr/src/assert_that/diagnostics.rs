@@ -13,8 +13,8 @@ impl<T, M: Mode, R> AssertThat<'_, T, M, R> {
     /// Sets the source expression shown in the backticked `Expression:` field of failure messages.
     ///
     /// The entry macros and `#[fluent_expressions]` record it through
-    /// `__private::with_expression`. Derived child chains start a new diagnostic subject and do not
-    /// inherit their parent expression.
+    /// `__private::with_expression`. Derived child chains inherit it and record their projections
+    /// separately.
     #[must_use]
     pub(crate) fn with_expression(mut self, expression: &'static str) -> Self {
         self.state.settings.expression = crate::Expression::Explicit(expression);

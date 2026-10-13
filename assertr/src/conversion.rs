@@ -26,7 +26,9 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     #[cfg(feature = "serde-json")]
     #[must_use]
     pub fn as_json(self) -> AssertThat<'t, Result<String, serde_json::Error>, M, R> {
-        self.map(|it| Actual::Owned(serde_json::to_string(it.borrowed())))
+        self.map_as("as_json()", |it| {
+            Actual::Owned(serde_json::to_string(it.borrowed()))
+        })
     }
 
     /// Serializes the borrowed view of the subject once, returning a TOML `Result` subject.
@@ -52,7 +54,9 @@ impl<'t, T: serde::Serialize, M: Mode, R> AssertThat<'t, T, M, R> {
     #[cfg(feature = "serde-toml")]
     #[must_use]
     pub fn as_toml(self) -> AssertThat<'t, Result<String, toml::ser::Error>, M, R> {
-        self.map(|it| Actual::Owned(toml::to_string(it.borrowed())))
+        self.map_as("as_toml()", |it| {
+            Actual::Owned(toml::to_string(it.borrowed()))
+        })
     }
 }
 
@@ -89,7 +93,7 @@ mod tests {
     macro_rules! conversion_tests {
         ($module:ident, $method:ident) => {
             mod $module {
-                use indoc::indoc;
+                use indoc::formatdoc;
 
                 use super::*;
 
@@ -154,16 +158,17 @@ mod tests {
                     let failures = converted.capture(|it| it.is_equal_to("wrong"));
                     assert_that!(failures).contains_exactly_satisfying([
                         |element: AssertThat<AssertionFailure, Capture>| {
-                            element.derive(|value| value).has_text_report(indoc! {r"
+                            element.derive(|value| value).has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Subject: serialized subject
                         Expression: `subject`
+                        Projection: `.{method}().ok()`
 
                         Expected: <re... 7 more characters ...
 
                           Actual: <re... 7 more characters ...
                         -------- assertr --------
-                    "});
+                    ", method = stringify!($method)});
 
                             element
                                 .derive_owned(|value| value.subject_name.as_deref())
@@ -189,9 +194,10 @@ mod tests {
                         .capture(|it| it.$method().is_ok_satisfying(|_| {}));
                     assert_that!(failures).contains_exactly_satisfying([
                         |element: AssertThat<AssertionFailure, Capture>| {
-                            element.derive(|value| value).has_text_report(indoc! {r"
+                            element.derive(|value| value).has_text_report(formatdoc! {r"
                         -------- assertr --------
                         Expression: `subject`
+                        Projection: `.{method}()`
 
                         Actual: Err(
                             <redacted>,
@@ -201,7 +207,7 @@ mod tests {
 
                         Expected: Result::Ok
                         -------- assertr --------
-                    "});
+                    ", method = stringify!($method)});
 
                             assert_redacted(element.actual(), &["private-serialization-value"]);
                         },

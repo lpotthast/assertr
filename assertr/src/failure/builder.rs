@@ -45,6 +45,7 @@ impl FailureBuilder {
                 location: None,
                 subject_name: None,
                 expression: None,
+                projections: Vec::new(),
                 subject_type_name: core::any::type_name::<T>(),
                 kind,
                 actual: None,
@@ -100,6 +101,11 @@ impl FailureBuilder {
     pub fn actual(mut self, actual: impl Into<Rendered>) -> Self {
         self.failure.actual = Some(actual.into());
         self
+    }
+
+    /// Whether an actual value was set.
+    pub(crate) const fn has_actual(&self) -> bool {
+        self.failure.actual.is_some()
     }
 
     /// Sets the sentence between the actual and the expected value, such as `does not contain`.

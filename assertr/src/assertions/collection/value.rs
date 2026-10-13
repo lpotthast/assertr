@@ -6,8 +6,7 @@ use core::marker::PhantomData;
 use super::{Collection, Placement, StableOrder};
 use crate::{
     assertions::support::indexed_equality_mismatch,
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation, passed},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view, passed},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::{RenderingContext, RenderingOrder, ValueRenderer},
     util::matching::{assign_exactly, match_bipartite},
@@ -166,7 +165,7 @@ impl<E> Contains<E> {
 impl<C: Collection + ?Sized, E, R> Expectation<C, R> for Contains<E>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
@@ -185,7 +184,7 @@ where
         actual: &'a C,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<C::Item, _>(&self.0);
+        let expected = operand_view::<C::Item, _>(&self.0);
         if actual.elements().any(|it| it.eq(expected)) {
             Ok(())
         } else {
@@ -205,7 +204,7 @@ where
         let (failure, expected) = match rejected {
             None => (
                 failure.relation("contains"),
-                borrow_for::<C::Item, _>(&self.0),
+                operand_view::<C::Item, _>(&self.0),
             ),
             Some((actual, expected)) => (
                 failure
@@ -243,7 +242,7 @@ impl<E> DoesNotContain<E> {
 impl<C: Collection + ?Sized, E, R> Expectation<C, R> for DoesNotContain<E>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
     type Success<'a>
@@ -262,7 +261,7 @@ where
         actual: &'a C,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<C::Item, _>(&self.0);
+        let expected = operand_view::<C::Item, _>(&self.0);
         if actual.elements().any(|it| it.eq(expected)) {
             Err(expected)
         } else {
@@ -282,7 +281,7 @@ where
         let (failure, expected) = match rejected {
             None => (
                 failure.relation("does not contain"),
-                borrow_for::<C::Item, _>(&self.0),
+                operand_view::<C::Item, _>(&self.0),
             ),
             Some((actual, expected)) => (
                 failure
@@ -314,7 +313,7 @@ expected_operands_traits!(ContainsAll<E, B>, operand, new);
 impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsAll<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
@@ -337,7 +336,7 @@ where
         let expected = self.expected.as_ref();
         let missing = expected
             .iter()
-            .map(borrow_for::<C::Item, _>)
+            .map(operand_view::<C::Item, _>)
             .filter(|expected| !actual.elements().any(|it| it.eq(*expected)))
             .collect::<Vec<_>>();
         if missing.is_empty() {
@@ -379,6 +378,149 @@ where
     }
 }
 
+/// Requires at least one element equal to one of the expected values.
+///
+/// An empty expected list never matches.
+/// [`CollectionAssertions::contains_any_of`](crate::assertions::CollectionAssertions::contains_any_of)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::collection::ContainsAnyOf, prelude::*};
+///
+/// assert_that!(["warn", "info"]).matches(ContainsAnyOf::new(["error", "warn"]));
+/// ```
+pub struct ContainsAnyOf<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+expected_operands_traits!(ContainsAnyOf<E, B>, operand, new);
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsAnyOf<E, B>
+where
+    C::Item: PartialEq<E::View>,
+    E: ExpectedOperand<C::Item>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(&'a self, actual: &'a C, _: &AssertionContext<'_, R>) -> Result<(), ()> {
+        let mut expected = self
+            .expected
+            .as_ref()
+            .iter()
+            .map(operand_view::<C::Item, _>);
+        passed(expected.any(|expected| actual.elements().any(|it| it.eq(expected))))
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a C, ())>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let expected = self.expected.as_ref();
+        failure
+            .relations(
+                rejected.map(|(actual, ())| render.collection(actual)),
+                "contains any of",
+                "does not contain any of",
+            )
+            .expected(
+                render.borrowed_values::<E::View, _>(expected, RenderingOrder::PreserveIteration),
+            )
+    }
+}
+
+/// Rejects collections containing an element equal to any of the unexpected values. The
+/// rejection retains the unexpected values that were found, in expected order.
+///
+/// [`CollectionAssertions::does_not_contain_any_of`](crate::assertions::CollectionAssertions::does_not_contain_any_of)
+/// executes this same definition. For two sets, `is_disjoint_from` checks the same relation
+/// through native lookup.
+///
+/// ```
+/// use assertr::{matchers::collection::DoesNotContainAnyOf, prelude::*};
+///
+/// assert_that!(["warn", "info"]).matches(DoesNotContainAnyOf::new(["error", "fatal"]));
+/// ```
+pub struct DoesNotContainAnyOf<E, B = Vec<E>> {
+    expected: B,
+    operand: PhantomData<fn() -> E>,
+}
+expected_operands_traits!(DoesNotContainAnyOf<E, B>, operand, new);
+
+impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for DoesNotContainAnyOf<E, B>
+where
+    C::Item: PartialEq<E::View>,
+    E: ExpectedOperand<C::Item>,
+    B: AsRef<[E]>,
+    R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = Vec<&'a E::View>
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a C,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let found = self
+            .expected
+            .as_ref()
+            .iter()
+            .map(operand_view::<C::Item, _>)
+            .filter(|unexpected| actual.elements().any(|it| it.eq(*unexpected)))
+            .collect::<Vec<_>>();
+        if found.is_empty() { Ok(()) } else { Err(found) }
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a C, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let unexpected = self.expected.as_ref();
+        let failure = match rejected {
+            None => failure.relation("does not contain any of"),
+            Some((actual, found)) => failure
+                .actual(render.collection(actual))
+                .relation("contains some of")
+                .fact(Fact::labelled(
+                    "Elements found",
+                    render.borrowed_values::<E::View, _>(&found, RenderingOrder::PreserveIteration),
+                )),
+        };
+        failure.unexpected(
+            render.borrowed_values::<E::View, _>(unexpected, RenderingOrder::PreserveIteration),
+        )
+    }
+}
+
 /// A rejected affix subject with its retained evidence.
 type RejectedAffix<'a, C, V> = (&'a C, PositionalRejection<'a, <C as Collection>::Item, V>);
 
@@ -396,7 +538,7 @@ fn evaluate_affix<'a, C, E>(
 where
     C: StableOrder + ?Sized,
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
 {
     let length = actual.length();
     let (offset, compared) = if placement == Placement::Suffix {
@@ -410,7 +552,7 @@ where
     let mismatch = actual
         .elements()
         .skip(offset)
-        .zip(compared.iter().map(borrow_for::<C::Item, _>))
+        .zip(compared.iter().map(operand_view::<C::Item, _>))
         .enumerate()
         .find(|(_, (actual, expected))| !(*actual).eq(*expected))
         .map(|(index, (actual, expected))| ElementMismatch {
@@ -435,7 +577,7 @@ fn explain_affix<C, E, R>(
 ) -> FailureBuilder
 where
     C: StableOrder + ?Sized,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     let (holds, fails) = if placement == Placement::Suffix {
@@ -490,7 +632,7 @@ expected_operands_traits!(StartsWith<E, B>, operand, new);
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for StartsWith<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
@@ -553,7 +695,7 @@ expected_operands_traits!(EndsWith<E, B>, operand, new);
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for EndsWith<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
@@ -613,7 +755,7 @@ expected_operands_traits!(ContainsContiguous<E, B>, operand, new);
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsContiguous<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
@@ -644,7 +786,7 @@ where
         let found = elements.windows(expected.len()).any(|window| {
             window
                 .iter()
-                .zip(expected.iter().map(borrow_for::<C::Item, _>))
+                .zip(expected.iter().map(operand_view::<C::Item, _>))
                 .all(|(actual, expected)| (*actual).eq(expected))
         });
         passed(found)
@@ -691,7 +833,7 @@ expected_operands_traits!(ContainsExactly<E, B>, operand, new);
 impl<C: StableOrder + ?Sized, E, B, R> Expectation<C, R> for ContainsExactly<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
@@ -716,7 +858,7 @@ where
         if same_length
             && actual
                 .elements()
-                .zip(expected.iter().map(borrow_for::<C::Item, _>))
+                .zip(expected.iter().map(operand_view::<C::Item, _>))
                 .all(|(actual, expected)| actual.eq(expected))
         {
             return Ok(());
@@ -735,7 +877,7 @@ where
         let mismatch = elements
             .iter()
             .copied()
-            .zip(expected.iter().map(borrow_for::<C::Item, _>))
+            .zip(expected.iter().map(operand_view::<C::Item, _>))
             .enumerate()
             .find(|(_, (actual, expected))| !(*actual).eq(*expected))
             .map(|(index, (actual, expected))| ElementMismatch {
@@ -744,11 +886,11 @@ where
                 expected,
             });
         let matched = match_bipartite(elements.len(), expected.len(), |a, e| {
-            elements[a].eq(borrow_for::<C::Item, _>(&expected[e]))
+            elements[a].eq(operand_view::<C::Item, _>(&expected[e]))
         });
         let only_order_differs = same_length && matched.is_exact();
         let (unexpected, missing) = matched.unmatched(&elements, |index| {
-            borrow_for::<C::Item, _>(&expected[index])
+            operand_view::<C::Item, _>(&expected[index])
         });
         Err(ExactElementsRejection {
             unexpected,
@@ -830,7 +972,7 @@ expected_operands_traits!(ContainsExactlyInAnyOrder<E, B>, operand, new);
 impl<C: Collection + ?Sized, E, B, R> Expectation<C, R> for ContainsExactlyInAnyOrder<E, B>
 where
     C::Item: PartialEq<E::View>,
-    E: BorrowFor<C::Item>,
+    E: ExpectedOperand<C::Item>,
     B: AsRef<[E]>,
     R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
 {
@@ -865,13 +1007,13 @@ where
             context.is_probe(),
             elements.len(),
             expected.len(),
-            |a, e| elements[a].eq(borrow_for::<C::Item, _>(&expected[e])),
+            |a, e| elements[a].eq(operand_view::<C::Item, _>(&expected[e])),
         );
         let (unexpected, missing) = match unmatched {
             Ok(()) => return Ok(()),
             Err(None) => (Vec::new(), Vec::new()),
             Err(Some(matched)) => matched.unmatched(&elements, |index| {
-                borrow_for::<C::Item, _>(&expected[index])
+                operand_view::<C::Item, _>(&expected[index])
             }),
         };
         Err(ExactElementsRejection {
@@ -1394,7 +1536,7 @@ mod tests {
         use core::{borrow::Borrow, cell::Cell};
 
         use super::super::*;
-        use crate::{prelude::*, test_support::BorrowSpy};
+        use crate::{borrow_for::BorrowFor, prelude::*, test_support::BorrowSpy};
 
         #[test]
         fn borrowed_wrapper_lists_reuse_the_stored_operand_selection_across_subjects() {

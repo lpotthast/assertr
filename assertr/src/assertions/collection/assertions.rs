@@ -6,8 +6,7 @@ use super::{
 };
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
-    expectation::{Expectation, lists::SatisfyingList},
+    expectation::{Expectation, ExpectedOperand, lists::SatisfyingList},
     matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
@@ -16,9 +15,10 @@ use crate::{
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
 ///
-/// Expected values can be owned or borrowed through [`BorrowFor<Collection::Item>`](BorrowFor).
-/// Reference-valued items keep their declared type. Use [`crate::matchers::dereferenced`] to match
-/// their pointees. Empty expected lists may need an explicit element type:
+/// Expected values can be owned or borrowed through
+/// [`BorrowFor<Collection::Item>`](crate::borrow_for::BorrowFor). Reference-valued items keep their
+/// declared type. Use [`crate::matchers::dereferenced`] to match their pointees. Empty expected
+/// lists may need an explicit element type:
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -84,7 +84,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn contains<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that at least one element matches `matcher`.
@@ -108,20 +108,69 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// Extra subject elements are allowed. Expectations are independent, so duplicates do not
     /// require distinct matches. Use `contains_exactly_in_any_order` for multiset equality.
     ///
-    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
-    /// collection item type `T`. Arrays, slices, and vectors reuse their storage. Prepare
-    /// generators explicitly with `.contains_all(generator.collect::<Vec<_>>())`.
+    /// Each expected element `E` selects a borrowed view through
+    /// [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared collection item type `T`.
+    /// Arrays, slices, and vectors reuse their storage. Prepare generators explicitly with
+    /// `.contains_all(generator.collect::<Vec<_>>())`.
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
+
+    /// Asserts that at least one element equals one of the `expected` values.
+    ///
+    /// An empty expected list never matches. Expected values select their borrowed views like
+    /// [`contains_all`](Self::contains_all).
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!(["warn", "info"]).contains_any_of(["error", "warn"]);
+    /// ```
+    fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: ExpectedOperand<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
+
+    /// Asserts that no element equals any of the `unexpected` values.
+    ///
+    /// The failure lists every unexpected value that was found. Expected values select their
+    /// borrowed views like [`contains_all`](Self::contains_all). Two sets can use the set relation
+    /// `is_disjoint_from` instead.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!(vec!["warn", "info"]).does_not_contain_any_of(["error", "fatal"]);
+    /// ```
+    fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
+    where
+        T: PartialEq<E::View>,
+        E: ExpectedOperand<T>,
+        R: ValueRenderer<T> + ValueRenderer<E::View>;
+
+    /// Asserts that exactly `count` elements match `matcher`.
+    ///
+    /// Each element is probed once. A failure reports the actual count and the matching
+    /// elements, so it needs a renderer for the elements as well as for the counts.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    ///
+    /// assert_that!([1, 5, 7]).has_count_matching(2, gt(4));
+    /// ```
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> Self
+    where
+        P: Expectation<T, R>,
+        R: ValueRenderer<T> + ValueRenderer<usize>;
 
     /// Asserts that no element equals `not_expected`.
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that no element matches the unwanted constraint `not_expected`.
@@ -146,7 +195,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts one-to-one matching between subject elements and matchers, independent of order.
@@ -223,7 +272,7 @@ where
     fn contains<E>(self, expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::Contains::new(expected))
@@ -250,17 +299,46 @@ where
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsAll::new(expected))
     }
 
     #[track_caller]
+    fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
+    where
+        C::Item: PartialEq<E::View>,
+        E: ExpectedOperand<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+    {
+        self.matches(value::ContainsAnyOf::new(expected))
+    }
+
+    #[track_caller]
+    fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
+    where
+        C::Item: PartialEq<E::View>,
+        E: ExpectedOperand<C::Item>,
+        R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
+    {
+        self.matches(value::DoesNotContainAnyOf::new(unexpected))
+    }
+
+    #[track_caller]
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> Self
+    where
+        P: Expectation<C::Item, R>,
+        R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+    {
+        self.matches(super::matching::HasCountMatching::new(count, matcher))
+    }
+
+    #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::DoesNotContain::new(not_expected))
@@ -288,7 +366,7 @@ where
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsExactlyInAnyOrder::new(expected))
@@ -333,6 +411,9 @@ mod tests {
             values.must().contain_matching(eq(2));
             values.must().contain_satisfying(is(2));
             values.must().contain_all([1, 3]);
+            values.must().contain_any_of([3, 4]);
+            values.must().not_contain_any_of([4, 5]);
+            values.must().have_count_matching(1, eq(2));
             values.must().not_contain(4);
             values.must().not_contain_matching(eq(4));
             values.must().not_contain_satisfying(is(4));
@@ -612,6 +693,198 @@ mod tests {
                       - Elements not found: [
                             42,
                         ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod contains_any_of {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!([1, 2].as_slice()), contains_any_of([3, 4]));
+        }
+
+        #[test]
+        fn succeeds_when_one_expected_value_is_present() {
+            assert_that!([1, 2, 3].as_slice()).contains_any_of([9, 3]);
+            assert_that!(vec![String::from("foo")]).contains_any_of(["bar", "foo"]);
+        }
+
+        #[test]
+        fn rejects_an_empty_expected_list() {
+            let failures =
+                assert_that!([1].as_slice()).capture(|it| it.contains_any_of([] as [i32; 0]));
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn panics_when_no_expected_value_is_present() {
+            assert_that!(|| {
+                assert_that!([1, 2].as_slice())
+                    .with_location(false)
+                    .contains_any_of([3, 4]);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2].as_slice()`
+
+                    Actual: [
+                        1,
+                        2,
+                    ]
+
+                    does not contain any of
+
+                    Expected: [
+                        3,
+                        4,
+                    ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod does_not_contain_any_of {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].as_slice()),
+                does_not_contain_any_of([2, 3])
+            );
+        }
+
+        #[test]
+        fn succeeds_when_no_unexpected_value_is_present() {
+            assert_that!([1, 2].as_slice())
+                .does_not_contain_any_of([3, 4])
+                .does_not_contain_any_of([] as [i32; 0]);
+            assert_that!(vec![String::from("foo")]).does_not_contain_any_of(["bar"]);
+        }
+
+        #[test]
+        fn panics_with_every_unexpected_value_found() {
+            assert_that!(|| {
+                assert_that!([1, 2, 3].as_slice())
+                    .with_location(false)
+                    .does_not_contain_any_of([3, 4, 1]);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 2, 3].as_slice()`
+
+                    Actual: [
+                        1,
+                        2,
+                        3,
+                    ]
+
+                    contains some of
+
+                    Unexpected: [
+                        3,
+                        4,
+                        1,
+                    ]
+
+                    Details:
+                      - Elements found: [
+                            3,
+                            1,
+                        ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count_matching {
+        use indoc::formatdoc;
+
+        use crate::{
+            matchers::{gt, predicate},
+            prelude::*,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].as_slice()),
+                has_count_matching(2, gt(1))
+            );
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that!([1, 5, 7].as_slice())
+                .has_count_matching(2, gt(4))
+                .has_count_matching(0, gt(9))
+                .has_count_matching(3, gt(0));
+        }
+
+        #[test]
+        fn probes_each_element_once() {
+            let calls = core::cell::Cell::new(0);
+            let failures = assert_that!([1, 2, 3].as_slice()).capture(|it| {
+                it.has_count_matching(
+                    1,
+                    predicate(|_: &i32| {
+                        calls.set(calls.get() + 1);
+                        true
+                    }),
+                )
+            });
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(3);
+        }
+
+        #[test]
+        fn panics_with_the_counts_and_the_matching_elements() {
+            assert_that!(|| {
+                assert_that!([1, 5, 7].as_slice())
+                    .with_location(false)
+                    .has_count_matching(1, gt(4));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 5, 7].as_slice()`
+
+                    Actual: [
+                        1,
+                        5,
+                        7,
+                    ]
+
+                    does not have the expected number of matching elements
+
+                    Constraint:
+                        is greater than
+
+                        Expected: 4
+
+                    Details:
+                      - Expected count: 1
+                      - Actual count: 2
+                    Nested failures:
+                      - Actual: 5
+
+                        matches the constraint
+
+                      - Actual: 7
+
+                        matches the constraint
                     -------- assertr --------
                 "});
         }

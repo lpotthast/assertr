@@ -1,14 +1,11 @@
 use super::{
-    Map, MapLookup, entries_are,
-    entry_matcher_list::SatisfyingEntryList,
-    imp,
-    matching::{ContainsEntryMatching, ContainsValueMatching},
+    Map, MapLookup, entries_are, entry, entry_matcher_list::SatisfyingEntryList, imp,
+    matching::ContainsValueMatching,
 };
 use crate::{
     AssertThat, Mode,
     assertions::map::EntryMatcherList,
-    borrow_for::BorrowFor,
-    expectation::Expectation,
+    expectation::{Expectation, ExpectedOperand},
     matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
@@ -17,16 +14,18 @@ use crate::{
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
 /// implementing [`Map`].
 ///
-/// Single-key assertions accept `&Q` directly. Bulk operands implement [`BorrowFor<K>`], selecting
-/// `View` with the stored key type `K` as context. Both use native [`MapLookup<Q>`]. Selection
-/// grants no lookup capability: hash maps require hashing and equality, tree maps require ordering,
-/// and custom maps impose their own bounds. There is no fallback to an equality scan.
+/// Every key operand, single or bulk, implements [`BorrowFor<K>`](crate::borrow_for::BorrowFor),
+/// selecting `View` with the stored key type `K` as context, and is looked up through native
+/// [`MapLookup<View>`](MapLookup). So `contains_key("retries")` works on `String` keys, and
+/// `contains_key(&key)` with a stored key. Selection grants no lookup capability: hash maps require
+/// hashing and equality, tree maps require ordering, and custom maps impose their own bounds. There
+/// is no fallback to an equality scan.
 ///
 /// The renderer must render the selected query view, plus the stored keys and values used in
 /// diagnostics. Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query
 /// for lookup and paths. Exact keyed checks also render stored keys to identify unexpected entries.
 ///
-/// # Bulk query views
+/// # Key query views
 ///
 /// Standard owned, borrowed, mutable-reference, and smart-pointer key operands remain supported.
 /// String keys accept `str` views, and vector keys accept slices:
@@ -65,24 +64,24 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     type Map: Map<Key = K, Value = V>;
 
     /// Asserts that the map has an entry under `expected`, regardless of its value.
-    fn contains_key<Q>(self, expected: &Q) -> Self
+    fn contains_key<E>(self, expected: E) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>;
+        E: ExpectedOperand<K>,
+        Self::Map: MapLookup<E::View>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that the map has no entry under `not_expected`.
-    fn does_not_contain_key<Q>(self, not_expected: &Q) -> Self
+    fn does_not_contain_key<E>(self, not_expected: E) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>;
+        E: ExpectedOperand<K>,
+        Self::Map: MapLookup<E::View>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that at least one map value equals `expected`.
     fn contains_value<E>(self, expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that some map value matches `expected`.
@@ -94,29 +93,30 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that the map maps `key` to `value`.
     ///
-    /// `value` can be owned or borrowed through [`BorrowFor<V>`](BorrowFor).
+    /// `value` can be owned or borrowed through [`BorrowFor<V>`](crate::borrow_for::BorrowFor).
     /// Stored `String` values also accept literals. Reference-valued entries keep their declared
     /// type.
     ///
     /// This performs one assertion covering both key presence and value equality. A missing key is
     /// reported once.
-    fn contains_entry<Q, E>(self, key: &Q, value: E) -> Self
+    fn contains_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
-        V: PartialEq<E::View>,
-        E: BorrowFor<V>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>;
+        EK: ExpectedOperand<K>,
+        Self::Map: MapLookup<EK::View>,
+        V: PartialEq<EV::View>,
+        EV: ExpectedOperand<V>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>;
 
     /// Asserts that the map has `key` and its value matches `expected`.
     ///
     /// The key is looked up natively. A missing key or a rejected value fails with one nested
-    /// failure located at the key. Extra entries are allowed.
+    /// failure located at the key. Extra entries are allowed. This is the method form of the
+    /// [`entry`](super::entry) matcher.
     ///
     /// ```
     /// use assertr::{matchers::gt, prelude::*};
@@ -124,36 +124,36 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     ///
     /// assert_that!(BTreeMap::from([("retries", 3)])).contains_entry_matching("retries", gt(0));
     /// ```
-    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
+    fn contains_entry_matching<EK, E>(self, key: EK, expected: E) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
+        EK: ExpectedOperand<K>,
+        Self::Map: MapLookup<EK::View>,
         E: Expectation<V, R>,
-        R: ValueRenderer<Q>;
+        R: ValueRenderer<EK::View>;
 
     /// Asserts that the map has `key` and its value satisfies `assertions`.
     ///
     /// The assertions run in capture mode against the value. If any fail, this method raises one
     /// map-level failure carrying every captured value failure as a nested failure located at the
     /// key.
-    fn contains_entry_satisfying<Q, A>(self, key: &Q, assertions: A) -> Self
+    fn contains_entry_satisfying<EK, A>(self, key: EK, assertions: A) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
+        EK: ExpectedOperand<K>,
+        Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
-        R: ValueRenderer<Q> + Clone;
+        R: ValueRenderer<EK::View> + Clone;
 
     /// Asserts that the map does not map `key` to `value`. This passes when the key is absent as
     /// well as when it is present with a different value. Like
     /// [`contains_entry`](MapAssertions::contains_entry), the operand selects a borrowed view
-    /// through [`BorrowFor`] for the declared value type.
-    fn does_not_contain_entry<Q, E>(self, key: &Q, value: E) -> Self
+    /// through [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared value type.
+    fn does_not_contain_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        Q: ?Sized,
-        Self::Map: MapLookup<Q>,
-        V: PartialEq<E::View>,
-        E: BorrowFor<V>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>;
+        EK: ExpectedOperand<K>,
+        Self::Map: MapLookup<EK::View>,
+        V: PartialEq<EV::View>,
+        EV: ExpectedOperand<V>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>;
 
     /// Asserts that every expected key is present. Extra map keys are allowed.
     ///
@@ -162,7 +162,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Successful checks allocate no query-view buffer. Collect generators explicitly first.
     fn contains_keys<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Self::Map: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
@@ -184,10 +184,10 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// ```
     fn contains_exactly_entries<EK, EV>(self, expected: impl AsRef<[(EK, EV)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K>
             + ValueRenderer<V>
             + ValueRenderer<EK::View>
@@ -230,7 +230,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// bulk methods. Collect generators explicitly first.
     fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone;
@@ -245,21 +245,21 @@ where
     type Map = Mp;
 
     #[track_caller]
-    fn contains_key<Q>(self, expected: &Q) -> Self
+    fn contains_key<E>(self, expected: E) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>,
+        E: ExpectedOperand<K>,
+        Mp: MapLookup<E::View>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::ContainsKey::new(expected))
     }
 
     #[track_caller]
-    fn does_not_contain_key<Q>(self, not_expected: &Q) -> Self
+    fn does_not_contain_key<E>(self, not_expected: E) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q>,
+        E: ExpectedOperand<K>,
+        Mp: MapLookup<E::View>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::DoesNotContainKey::new(not_expected))
     }
@@ -268,7 +268,7 @@ where
     fn contains_value<E>(self, expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::ContainsValue::new(expected))
@@ -286,54 +286,54 @@ where
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::DoesNotContainValue::new(not_expected))
     }
 
     #[track_caller]
-    fn contains_entry<Q, E>(self, key: &Q, value: E) -> Self
+    fn contains_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
-        V: PartialEq<E::View>,
-        E: BorrowFor<V>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>,
+        EK: ExpectedOperand<K>,
+        Mp: MapLookup<EK::View>,
+        V: PartialEq<EV::View>,
+        EV: ExpectedOperand<V>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>,
     {
         self.matches(imp::ContainsEntry::new(key, value))
     }
 
     #[track_caller]
-    fn contains_entry_matching<Q, E>(self, key: &Q, expected: E) -> Self
+    fn contains_entry_matching<EK, E>(self, key: EK, expected: E) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
+        EK: ExpectedOperand<K>,
+        Mp: MapLookup<EK::View>,
         E: Expectation<V, R>,
-        R: ValueRenderer<Q>,
+        R: ValueRenderer<EK::View>,
     {
-        self.matches(ContainsEntryMatching::new(key, expected))
+        self.matches(entry(key, expected))
     }
 
     #[track_caller]
-    fn contains_entry_satisfying<Q, A>(self, key: &Q, assertions: A) -> Self
+    fn contains_entry_satisfying<EK, A>(self, key: EK, assertions: A) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
+        EK: ExpectedOperand<K>,
+        Mp: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
-        R: ValueRenderer<Q> + Clone,
+        R: ValueRenderer<EK::View> + Clone,
     {
         self.contains_entry_matching(key, satisfying(assertions))
     }
 
     #[track_caller]
-    fn does_not_contain_entry<Q, E>(self, key: &Q, value: E) -> Self
+    fn does_not_contain_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        Q: ?Sized,
-        Mp: MapLookup<Q>,
-        V: PartialEq<E::View>,
-        E: BorrowFor<V>,
-        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<Q> + ValueRenderer<E::View>,
+        EK: ExpectedOperand<K>,
+        Mp: MapLookup<EK::View>,
+        V: PartialEq<EV::View>,
+        EV: ExpectedOperand<V>,
+        R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>,
     {
         self.matches(imp::DoesNotContainEntry::new(key, value))
     }
@@ -341,7 +341,7 @@ where
     #[track_caller]
     fn contains_keys<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Mp: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
@@ -351,10 +351,10 @@ where
     #[track_caller]
     fn contains_exactly_entries<EK, EV>(self, expected: impl AsRef<[(EK, EV)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K>
             + ValueRenderer<usize>
             + ValueRenderer<V>
@@ -376,7 +376,7 @@ where
     #[track_caller]
     fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone,
@@ -485,8 +485,8 @@ mod tests {
         #[test]
         fn zero_budget_does_not_render_keys() {
             struct NeverRender;
-            impl ValueRenderer<str> for NeverRender {
-                fn fmt(&self, _: &str, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            impl ValueRenderer<&str> for NeverRender {
+                fn fmt(&self, _: &&str, _: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
                     panic!("omitted key rendered")
                 }
             }
@@ -514,6 +514,23 @@ mod tests {
         #[test]
         fn succeeds_when_key_is_present() {
             assert_that!(BTreeMap::from([("foo", "bar")])).contains_key("foo");
+        }
+
+        #[test]
+        fn accepts_owned_borrowed_and_view_key_operands() {
+            let map = BTreeMap::from([(String::from("foo"), 1)]);
+            let key = String::from("foo");
+            assert_that!(map)
+                .contains_key("foo")
+                .contains_key(&key)
+                .contains_key(key.clone())
+                .does_not_contain_key("bar")
+                .contains_entry("foo", 1)
+                .contains_entry(&key, &1)
+                .does_not_contain_entry(key, 2);
+            assert_that!(BTreeMap::from([(1, "one")]))
+                .contains_key(1)
+                .contains_entry_matching(1, matchers::eq("one"));
         }
 
         #[test]

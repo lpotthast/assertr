@@ -3,13 +3,12 @@ use crate::{
     assertions::{
         collection::Placement,
         iterator::{
-            ContainsAllScan, ContainsMatchingScan, ContainsScan, CountScan,
+            ContainsAllScan, ContainsMatchingScan, ContainsScan, CountMatchingScan, CountScan,
             DoesNotContainMatchingScan, DoesNotContainScan, ElementsEqualScan, ElementsMatchScan,
             IsExhaustedScan, IsNotExhaustedScan, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
         },
     },
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{Expectation, MatcherList, lists::SatisfyingList},
+    expectation::{Expectation, ExpectedOperand, MatcherList, lists::SatisfyingList, operand_view},
     matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
@@ -17,8 +16,8 @@ use crate::{
 
 /// Terminal assertions for an owned iterator.
 ///
-/// Expected values use [`BorrowFor`] for the declared item type, including reference layers.
-/// Use [`crate::matchers::dereferenced`] to match an item's pointee:
+/// Expected values use [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared item type,
+/// including reference layers. Use [`crate::matchers::dereferenced`] to match an item's pointee:
 ///
 /// ```
 /// use assertr::{prelude::*, matchers::{dereferenced, eq}};
@@ -68,7 +67,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn contains<E>(self, expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator contains an element equal to each expected value.
@@ -86,7 +85,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator contains an element matching `expected`.
@@ -105,7 +104,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator's prefix matches the expected matcher list in order.
@@ -124,7 +123,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the iterator's suffix matches the expected matcher list in order.
@@ -143,7 +142,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
@@ -171,7 +170,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn does_not_contain<E>(self, not_expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that no iterator element matches the unwanted constraint `not_expected`.
@@ -190,7 +189,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that each element matches the constraint at the same position, including length.
@@ -215,7 +214,7 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     ) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts one-to-one matching between elements and the expected matcher list, independent of
@@ -265,6 +264,22 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     fn has_count(self, expected: usize) -> AssertThat<'t, (), M, R>
     where
         R: ValueRenderer<T> + ValueRenderer<usize>;
+
+    /// Asserts that exactly `count` iterator elements match `matcher`.
+    ///
+    /// Consumes the iterator until it ends, or until more than `count` elements matched, so an
+    /// infinite iterator with too many matches fails. A failure reports the matching elements at
+    /// their yield positions.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    ///
+    /// assert_that_owned!([1, 5, 7].into_iter()).has_count_matching(2, gt(4));
+    /// ```
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> AssertThat<'t, (), M, R>
+    where
+        P: Expectation<T, R>,
+        R: ValueRenderer<T> + ValueRenderer<usize>;
 }
 
 impl<'t, T, I, M: Mode, R> IteratorAssertions<'t, T, M, R> for AssertThat<'t, I, M, R>
@@ -275,11 +290,11 @@ where
     fn contains<E>(self, expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
-            ContainsScan::<T, _>::new(borrow_for::<T, _>(&expected))
+            ContainsScan::<T, _>::new(operand_view::<T, _>(&expected))
         })
     }
 
@@ -287,7 +302,7 @@ where
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || ContainsAllScan::<T, _>::new(expected.as_ref()))
@@ -315,7 +330,7 @@ where
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
@@ -352,7 +367,7 @@ where
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
@@ -389,7 +404,7 @@ where
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
@@ -429,11 +444,11 @@ where
     fn does_not_contain<E>(self, not_expected: E) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
-            DoesNotContainScan::<T, _>::new(borrow_for::<T, _>(&not_expected))
+            DoesNotContainScan::<T, _>::new(operand_view::<T, _>(&not_expected))
         })
     }
 
@@ -461,7 +476,7 @@ where
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || {
@@ -498,7 +513,7 @@ where
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> AssertThat<'t, (), M, R>
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         consume(self, || UnorderedEqualScan::<T, _>::new(expected.as_ref()))
@@ -549,6 +564,15 @@ where
         R: ValueRenderer<T> + ValueRenderer<usize>,
     {
         consume(self, || CountScan::<T>::new(expected))
+    }
+
+    #[track_caller]
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> AssertThat<'t, (), M, R>
+    where
+        P: Expectation<T, R>,
+        R: ValueRenderer<T> + ValueRenderer<usize>,
+    {
+        consume(self, || CountMatchingScan::<T, _>::new(count, matcher))
     }
 }
 
@@ -613,6 +637,7 @@ mod tests {
             core::iter::empty::<i32>().must_owned().be_exhausted();
             values().not_be_exhausted();
             values().have_count(3);
+            values().have_count_matching(1, eq(2));
         }
     }
 
@@ -1828,6 +1853,69 @@ mod tests {
                     Actual: []
 
                     is unexpectedly exhausted
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count_matching {
+        use indoc::formatdoc;
+
+        use crate::{matchers::gt, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                has_count_matching(2, gt(2))
+            );
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that_owned!([1, 5, 7].into_iter()).has_count_matching(2, gt(4));
+            assert_that_owned!(core::iter::empty::<i32>()).has_count_matching(0, gt(4));
+        }
+
+        #[test]
+        fn stops_on_an_infinite_iterator_after_one_extra_match() {
+            let mut iterator = 0..;
+            let failures =
+                assert_that_owned!(&mut iterator).capture(|it| it.has_count_matching(1, gt(1)));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains("Minimum actual count: 2");
+            assert_that!(iterator.next()).is_equal_to(Some(4));
+        }
+
+        #[test]
+        fn panics_with_the_matching_elements_at_their_positions() {
+            assert_that!(|| {
+                assert_that_owned!([1, 5, 2].into_iter())
+                    .with_location(false)
+                    .has_count_matching(2, gt(4));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 5, 2].into_iter()`
+
+                    does not have the expected number of matching elements
+
+                    Constraint:
+                        is greater than
+
+                        Expected: 4
+
+                    Details:
+                      - Expected count: 2
+                      - Actual count: 1
+                      - Consumed elements: 3
+                    Nested failures:
+                      - At [1]:
+                        Actual: 5
+
+                        matches the constraint
                     -------- assertr --------
                 "});
         }

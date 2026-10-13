@@ -4,7 +4,7 @@ use super::sign_expectations;
 use crate::{
     AssertThat,
     assertions::distance::{IsCloseTo, NumericDistance},
-    borrow_for::BorrowFor,
+    expectation::ExpectedOperand,
     mode::Mode,
     renderer::{DebugRenderer, Rendered, RenderingContext, ValueRenderer},
 };
@@ -61,8 +61,9 @@ pub trait SignedDurationAssertions<R = DebugRenderer> {
     /// without overflowing even at [`SignedDuration::MIN`] or [`SignedDuration::MAX`].
     ///
     /// A negative `allowed_deviation` is invalid and fails the assertion.
-    /// Both operands can independently be owned, borrowed, or custom [`BorrowFor`] wrappers with
-    /// `View = SignedDuration`. The renderer only needs to support that selected duration view.
+    /// Both operands can independently be owned, borrowed, or custom
+    /// [`BorrowFor`](crate::borrow_for::BorrowFor) wrappers with `View = SignedDuration`. The
+    /// renderer only needs to support that selected duration view.
     ///
     /// Because both parameters are generic, they cannot determine the target type of an untyped
     /// `.into()` or `Default::default()` call. Write `SignedDuration::default()` or otherwise state
@@ -76,8 +77,8 @@ pub trait SignedDurationAssertions<R = DebugRenderer> {
     /// ```
     fn is_close_to<E, D>(self, expected: E, allowed_deviation: D) -> Self
     where
-        E: BorrowFor<SignedDuration, View = SignedDuration>,
-        D: BorrowFor<SignedDuration, View = SignedDuration>,
+        E: ExpectedOperand<SignedDuration, View = SignedDuration>,
+        D: ExpectedOperand<SignedDuration, View = SignedDuration>,
         R: ValueRenderer<SignedDuration>;
 }
 
@@ -109,8 +110,8 @@ impl<M: Mode, R> SignedDurationAssertions<R> for AssertThat<'_, SignedDuration, 
     #[track_caller]
     fn is_close_to<E, D>(self, expected: E, allowed_deviation: D) -> Self
     where
-        E: BorrowFor<SignedDuration, View = SignedDuration>,
-        D: BorrowFor<SignedDuration, View = SignedDuration>,
+        E: ExpectedOperand<SignedDuration, View = SignedDuration>,
+        D: ExpectedOperand<SignedDuration, View = SignedDuration>,
         R: ValueRenderer<SignedDuration>,
     {
         self.matches(IsCloseTo::new(expected, allowed_deviation))

@@ -1,20 +1,25 @@
-error[E0277]: the trait bound `&str: BorrowFor<i32>` is not satisfied
+error[E0277]: `&str` cannot be used as an expected value for `i32`
  --> tests/partial/21-reject-wrong-field-type.rs:8:42
   |
 8 |     assert_that!(Point { x: 1 }).matches(partial!(Point { x: eq("text") }));
-  |                                  ------- ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ the trait `BorrowFor<i32>` is not implemented for `&str`
-  |                                  |
-  |                                  required by a bound introduced by this call
+  |                                          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ no comparison view of `&str` for `i32`
   |
-  = help: the following other types implement trait `BorrowFor<Context>`:
-            `&&str` implements `BorrowFor<String>`
-            `&mut str` implements `BorrowFor<Cow<'_, str>>`
-            `&mut str` implements `BorrowFor<String>`
-            `&str` implements `BorrowFor<&String>`
-            `&str` implements `BorrowFor<Cow<'_, str>>`
-            `&str` implements `BorrowFor<String>`
-            `str` implements `BorrowFor<Cow<'_, str>>`
-            `str` implements `BorrowFor<String>`
+  = help: the trait `ExpectedOperand<i32>` is not implemented for `&str`
+  = note: assertr borrows the expected value as the type it is compared with, so `PartialEq` between the two types is not enough
+  = note: pass a value of type `i32`, a reference to one, or a borrowed form such as `&str` for `String`
+  = note: or continue with a comparable subject first, such as with `.some()`, `.ok()`, or `.derive(..)`, or compare with `predicate(|actual| ..)`
+help: the trait `Expectation<S, R>` is conditionally implemented for `assertr::__private::PartialMatch<A, F, L>`
+ --> $WORKSPACE/assertr/src/__private/partial_match.rs
+  |
+  | / impl<S, A, R, F, L> Expectation<S, R> for PartialMatch<A, F, L>
+  | | where
+  | |     S: Borrow<A> + ?Sized,
+  | |     A: ?Sized,
+  | |     F: Fn(&A) -> bool,
+  | |     L: MatcherList<A, R>,
+  | |________-----------------^
+  |          |
+  |          unsatisfied requirement introduced here: `assertr::__private::Cons<assertr::matchers::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>, assertr::__private::Nil>: MatcherList<Point>`
   = note: required for `EqualTo<&str>` to implement `Expectation<i32>`
   = note: 1 redundant requirement hidden
   = note: required for `assertr::matchers::Field<Point, i32, {closure@$DIR/tests/partial/21-reject-wrong-field-type.rs:8:59: 8:60}, EqualTo<&str>>` to implement `Expectation<Point>`

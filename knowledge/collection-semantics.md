@@ -28,14 +28,17 @@ implementors must provide the promised behavior and performance.
 |---|---|---|
 | `HasLength` | A finite native `length()`. Strings count bytes. Integer range counts must fit `usize` or panic. | Length and emptiness checks. |
 | `Collection: HasLength` | `elements()` repeatedly yields references to the same elements in the same order. | Order-free checks. |
-| `StableOrder: Collection` | Element positions are part of the collection's meaning, as in a list. | Positional checks and indexes in failures. |
+| `StableOrder: Collection` | The type guarantees its iteration order, such as insertion order in a list or ascending order in a sorted set. | Positional checks and indexes in failures. |
 | `RandomAccess: StableOrder` | Constant-time `element_at`, `None` out of bounds. | Indexed extraction. |
-| `SetLookup: Collection` | Unique elements and native membership using the same equivalence that makes elements unique. | Set relations. |
+| `SetLookup<Q>: Collection` | Unique elements and native lookup of the stored element equivalent to a borrowed query `Q`, using the same equivalence that makes elements unique. `Q` defaults to the element type. | Set relations. |
 | `Map: HasLength` | Each traversal returns references to the same stored keys and values. | Map checks that iterate over entries. |
 | `MapLookup<Q>: Map` | Native borrowed-key lookup returning the same stored entries as traversal. | Key and keyed-entry queries. |
+| `StableEntryOrder: Map` | The type guarantees the order in which it yields entries, such as ascending key order. | Positional checks on the key and value views. |
 
-A linked list has stable positions without random access. A sorted set always traverses in order, but that order does
-not make its elements positional. Heaps support checks that do not depend on order. Strings use `StrAssertions`.
+A linked list has stable positions without random access. A `BTreeSet` has stable positions too, because it always
+yields its elements in ascending order, so its first element is its minimum. Iteration that merely happens to be
+deterministic does not qualify: a type's documentation must promise the order. Hash sets and heaps iterate in an
+unspecified order, so they support only checks that do not depend on order. Strings use `StrAssertions`.
 Shared and mutable reference subjects forward every collection, set, and map capability of their target.
 Iteration-only implementations (`HasLength`, `Collection`, `Map`) carry no lookup bounds such as `BuildHasher`, `Hash`,
 or `Ord`. Those belong on `SetLookup` and `MapLookup`. Capability traits are public under `assertr::assertions` and are
@@ -55,9 +58,11 @@ See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) f
 |---|---|
 | Element membership | Search by the [selected comparison view](comparison-operands.md#borrowed-views). Set subjects still use collection equality for these checks. |
 | `contains_all` | Every expected value has a match. Duplicate expectations may reuse one actual occurrence. |
+| `has_count_matching` | Exactly the expected number of elements match. Each element is probed once, and the matching elements are the evidence. |
+| `contains_any_of`, `does_not_contain_any_of` | At least one or none of the expected values has a match. An empty list never matches `contains_any_of`. Found unexpected values are reported in expected order. |
 | Ordered exact | Match every position and require equal lengths. Needs `StableOrder`. |
 | Unordered exact | Pair every actual occurrence and every expected slot exactly once, preserving duplicates. Uses [maximum assignment](matcher-composition.md#exact-unordered-assignment). |
-| Set relations | Native `SetLookup` membership and its uniqueness equivalence. |
+| Set relations | Each element of the other side, which can be any collection, selects a `BorrowFor` view of the subject's element type and is looked up in the subject through native `SetLookup`. A subset check identifies the stored elements it found by address, so it needs no lookup in the other side. |
 
 For example, `[1]` contains all of `[1, 1]`, but does not contain exactly those occurrences in any order.
 [Matcher composition](matcher-composition.md#evaluation-and-failure-evidence) explains how matcher-based checks evaluate candidates.
@@ -80,9 +85,10 @@ Exact keyed map checks use native lookup, length, and stored-key identity:
 ### Key and value views
 
 `MapProjectionAssertions::keys` and `values` derive a child chain over a borrowed view of the map. Both views implement
-`HasLength` and `Collection` only, so order-free collection checks and matchers such as `each` apply. Neither view is
-`StableOrder`, even for a `BTreeMap`, because map iteration order does not give keys or values positions. The keys
-view is also `SetLookup` when the map implements `MapLookup<Key>`, so set relations use the map's native lookup. The
+`HasLength` and `Collection`, so order-free collection checks apply. Both views are `StableOrder` when the map
+implements `StableEntryOrder`, as a `BTreeMap` does, so positional checks see the keys, and the values in key order.
+The views of a `HashMap` stay order-free. The keys
+view is also `SetLookup<Q>` when the map implements `MapLookup<Q>`, so set relations use the map's native lookup. The
 values view preserves duplicates. Diagnostics present keys as a set and values as a list, both in the map's
 `RENDERING_ORDER`.
 
@@ -92,7 +98,7 @@ values view preserves duplicates. Diagnostics present keys as a set and values a
 |---|---|
 | Bulk key operand | `BorrowFor<K>::View`, with stored key type `K` as context. `Borrow<View>` supplies the query. |
 | Native lookup | Separately requires `MapLookup<View>` with that map's own bounds. No universal `Hash`, `Ord`, or `PartialEq` requirement and no equality-scan fallback. |
-| Single-key method | Accepts native `&Q` without operand registration. |
+| Single-key method | Uses the same `BorrowFor<K>::View` selection as bulk operands, so owned, borrowed, and view operands all work. |
 | String key | Accepts `str` views. |
 | `Vec<u8>` key | Accepts explicit `&[u8]`. Array operands select array views and do not supply native vector-key lookup. |
 

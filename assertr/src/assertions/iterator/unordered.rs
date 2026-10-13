@@ -6,8 +6,7 @@ use super::{
 };
 use crate::{
     assertions::collection::{ContainsExactlyInAnyOrder, elements_are_in_any_order},
-    borrow_for::BorrowFor,
-    expectation::{Evidence, Expectation, MatcherList},
+    expectation::{Evidence, Expectation, ExpectedOperand, MatcherList},
     failure::AssertionFailure,
 };
 
@@ -44,7 +43,7 @@ where
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E::View>,
-    E: BorrowFor<T>,
+    E: ExpectedOperand<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = UnorderedRejection;
@@ -128,6 +127,7 @@ fn adopt(failure: FailureBuilder, report: AssertionFailure) -> FailureBuilder {
         location: _,
         subject_name: _,
         expression: _,
+        projections: _,
         subject_type_name: _,
         messages: _,
         kind: _,

@@ -3,7 +3,7 @@
 use super::Collection;
 use crate::{
     expectation::{AssertionContext, Evidence, Expectation, composite_items, evidence_items},
-    failure::{FailureBuilder, FailureKind},
+    failure::{Fact, FailureBuilder, FailureKind, PathSegment},
     renderer::{RenderingOrder, ValueRenderer},
 };
 
@@ -244,6 +244,133 @@ impl<C: Collection + ?Sized, R: ValueRenderer<C::Item>, M: Expectation<C::Item, 
     }
 }
 
+/// Counts the elements matching a matcher and compares the count with an expected count.
+///
+/// Each element is probed once. The rejection retains the actual count and the matching elements,
+/// so a report shows which elements matched, limited by the active rendering budget. The matching
+/// elements carry no position, because a [`Collection`] is order-free.
+/// [`CollectionAssertions::has_count_matching`](super::CollectionAssertions::has_count_matching)
+/// executes this same definition.
+///
+/// ```
+/// use assertr::{matchers::{collection::HasCountMatching, gt}, prelude::*};
+///
+/// assert_that!([1, 5, 7]).matches(HasCountMatching::new(2, gt(4)));
+/// ```
+#[derive(Debug, Clone)]
+pub struct HasCountMatching<M> {
+    count: usize,
+    matcher: M,
+}
+
+impl<M> HasCountMatching<M> {
+    /// Expects exactly `count` elements matching `matcher`.
+    #[must_use]
+    pub const fn new(count: usize, matcher: M) -> Self {
+        Self { count, matcher }
+    }
+}
+
+/// The relations, facts, and evidence shared by collection and iterator match counts. A
+/// rejection carries the label of its count, which is a lower bound when counting stopped early.
+pub(crate) fn explain_match_count<T: ?Sized, R, M>(
+    expected: usize,
+    matcher: &M,
+    rejection: Option<(&'static str, usize, Evidence)>,
+    failure: FailureBuilder,
+    context: &AssertionContext<'_, R>,
+) -> FailureBuilder
+where
+    M: Expectation<T, R>,
+    R: ValueRenderer<usize>,
+{
+    let render = context.render();
+    let failure = failure
+        .constraint(context.describe::<T, _>(matcher))
+        .fact(Fact::labelled("Expected count", render.value(&expected)));
+    match rejection {
+        None => failure.relation("has the expected number of matching elements"),
+        Some((label, count, evidence)) => failure
+            .relation("does not have the expected number of matching elements")
+            .fact(Fact::labelled(label, render.value(&count)))
+            .evidence(evidence),
+    }
+}
+
+/// Records `item` as one of the elements matching the counted constraint.
+pub(crate) fn record_match<T: ?Sized, R: ValueRenderer<T>>(
+    context: &mut AssertionContext<'_, R>,
+    item: &T,
+    path: Option<PathSegment>,
+) {
+    context.record(|context| {
+        FailureBuilder::new::<T>(FailureKind::Membership)
+            .actual(context.render().value(item))
+            .relation("matches the constraint")
+            .path(path)
+            .build()
+    });
+}
+
+impl<C, R, M> Expectation<C, R> for HasCountMatching<M>
+where
+    C: Collection + ?Sized,
+    R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+    M: Expectation<C::Item, R>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        C: 'a;
+    type Rejection<'a>
+        = (usize, Evidence)
+    where
+        Self: 'a,
+        C: 'a;
+
+    fn evaluate(
+        &self,
+        actual: &C,
+        settings: &AssertionContext<'_, R>,
+    ) -> Result<(), (usize, Evidence)> {
+        let mut context = settings.isolated_for_order(C::PRESENTATION.order());
+        let mut count = 0;
+        for item in actual.elements() {
+            if context.probe(item, &self.matcher) {
+                count += 1;
+                record_match(&mut context, item, None);
+            }
+        }
+        if count == self.count {
+            Ok(())
+        } else {
+            Err((count, context.into_evidence()))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Matching;
+
+    fn explain(
+        &self,
+        rejected: Option<(&C, (usize, Evidence))>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let failure = match rejected {
+            None => failure,
+            Some((actual, _)) => failure.actual(context.render().collection(actual)),
+        };
+        explain_match_count::<C::Item, _, _>(
+            self.count,
+            &self.matcher,
+            rejected.map(|(_, (count, evidence))| ("Actual count", count, evidence)),
+            failure,
+            context,
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     mod contains_matching {
@@ -298,9 +425,9 @@ mod tests {
             let failures = assert_that!(vec![vec![2, 3], vec![4]])
                 .with_location(false)
                 .capture(|it| {
-                    it.matches(matchers::each(contains_matching(predicate(|it: &i32| {
-                        *it == 1
-                    }))))
+                    it.matches(matchers::each_in_any_order(contains_matching(predicate(
+                        |it: &i32| *it == 1,
+                    ))))
                 });
             assert_that!(failures).contains_exactly_satisfying([
                 |failure: AssertThat<AssertionFailure, Capture>| {

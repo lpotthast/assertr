@@ -21,7 +21,7 @@ use alloc::{
 };
 
 pub use assertions::CollectionAssertions;
-pub use each::{Each, each};
+pub use each::{Each, EachInAnyOrder, each, each_in_any_order};
 pub use elements_are::{
     ElementsAre, contains_contiguous_elements, elements_are, ends_with_elements,
     starts_with_elements,
@@ -34,14 +34,15 @@ pub use identity::{
     UnorderedIdentityRejection,
 };
 pub use matching::{
-    ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
+    ContainsMatching, DoesNotContainMatching, HasCountMatching, contains_matching,
+    does_not_contain_matching,
 };
 pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
 pub use stable_order::{HasFirst, HasLast, StableOrderAssertions, StableOrderExtractAssertions};
 pub use value::{
-    Contains, ContainsAll, ContainsContiguous, ContainsExactly, ContainsExactlyInAnyOrder,
-    DoesNotContain, EndsWith, ExactElementsRejection, MissingElementsRejection,
-    PositionalRejection, StartsWith,
+    Contains, ContainsAll, ContainsAnyOf, ContainsContiguous, ContainsExactly,
+    ContainsExactlyInAnyOrder, DoesNotContain, DoesNotContainAnyOf, EndsWith,
+    ExactElementsRejection, MissingElementsRejection, PositionalRejection, StartsWith,
 };
 
 use crate::{
@@ -127,16 +128,16 @@ pub(crate) enum Placement {
 ///
 /// A plain `Collection` is order-free. Its iteration offsets are never reported as element
 /// positions, and order-sensitive assertions such as `contains_exactly` or `starts_with` do not
-/// compile for it. Implement [`StableOrder`] as well when the order is part of your collection's
-/// meaning, as in a list, and [`RandomAccess`] when you can also access any position in constant
-/// time. Sets implement `Collection` and [`SetLookup`](crate::assertions::SetLookup), but never
-/// `StableOrder`, even when their iteration is deterministic:
+/// compile for it. Implement [`StableOrder`] as well when your collection's type guarantees its
+/// iteration order, as a list or a sorted set does, and [`RandomAccess`] when you can also access
+/// any position in constant time. A hash set iterates in an unspecified order, so it is
+/// order-free:
 ///
-/// ```compile_fail,E0277
+/// ```compile_fail,E0599
 /// use assertr::prelude::*;
-/// use std::collections::BTreeSet;
+/// use std::collections::HashSet;
 ///
-/// assert_that!(BTreeSet::from([1, 2, 3])).contains_exactly([1, 2, 3]);
+/// assert_that!(HashSet::from([1, 2, 3])).contains_exactly([1, 2, 3]);
 /// ```
 ///
 /// Use an order-free assertion such as `contains_exactly_in_any_order` instead.
@@ -172,8 +173,8 @@ pub trait Collection: HasLength {
     fn elements(&self) -> impl Iterator<Item = &Self::Item>;
 }
 
-/// A [`Collection`] whose iteration order defines stable, meaningful element positions, the
-/// capability behind the order-sensitive assertions.
+/// A [`Collection`] whose type guarantees its iteration order, so element positions are
+/// meaningful. This is the capability behind the order-sensitive assertions.
 ///
 /// Implementing `StableOrder` for your own collection makes
 /// [`StableOrderAssertions`](crate::assertions::StableOrderAssertions) available: `starts_with`,
@@ -184,7 +185,7 @@ pub trait Collection: HasLength {
 /// mismatching element.
 ///
 /// The trait has no methods. It only declares that [`Collection::elements`] yields elements in
-/// their meaningful order.
+/// the order that the collection's type guarantees.
 ///
 /// ```
 /// use assertr::{
@@ -229,13 +230,17 @@ pub trait Collection: HasLength {
 ///
 /// # When to implement it
 ///
-/// "Stable" means that order is part of the collection's value semantics, so two collections
-/// with the same elements in a different order are different values. Deterministic iteration
-/// alone does not qualify. A [`alloc::collections::BTreeSet`] always iterates in sorted order,
-/// but that order does not make its elements positional, so it does not implement this trait.
+/// "Stable" means that the collection's type documents the order in which it yields its
+/// elements, so a user can predict every element's position. A list keeps the order in which
+/// elements were inserted. A [`alloc::collections::BTreeSet`] always yields its elements in
+/// ascending order, so its first element is its minimum and `contains_exactly` expects the
+/// elements sorted. Iteration that merely happens to be deterministic does not qualify. A
+/// `HashSet` and a [`BinaryHeap`] iterate in an unspecified order, so they do not implement this
+/// trait.
 ///
 /// The capability does not promise efficient access to an arbitrary position. [`LinkedList`]
-/// therefore has stable order even though it does not implement [`RandomAccess`].
+/// and `BTreeSet` therefore have stable order even though they do not implement
+/// [`RandomAccess`].
 ///
 /// Presentation metadata cannot grant this capability:
 ///
@@ -260,7 +265,7 @@ pub trait Collection: HasLength {
 /// requires_stable_order::<Deterministic>();
 /// ```
 #[diagnostic::on_unimplemented(
-    message = "the collection has no stable, meaningful element order",
+    message = "the collection does not guarantee its element order",
     label = "no stable-order capability",
     note = "order-sensitive assertions require `StableOrder`; use an order-free assertion such as `contains_exactly_in_any_order` instead"
 )]

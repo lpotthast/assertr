@@ -1,6 +1,7 @@
 use crate::{
     AssertThat, Mode,
-    expectation::Expectation,
+    expectation::{AssertionContext, Expectation},
+    failure::{Fact, FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
 };
 
@@ -8,8 +9,9 @@ use crate::{
 ///
 /// A property (`pub struct IsBlank;`) checks the view alone. An operand expectation
 /// (`pub struct Contains<E>;`) owns an [`AsRef<str>`] operand and compares both views. `role`
-/// selects whether diagnostics report the operand as the expected or unexpected value. Rejections
-/// retain the views, and failures render the subject's string view.
+/// selects whether diagnostics report the operand as the expected or unexpected value, and
+/// `constructor` names its lowercase convenience function. Rejections retain the views, and
+/// failures render the subject's string view.
 macro_rules! str_expectation {
     (
         $(#[$attr:meta])*
@@ -67,10 +69,20 @@ macro_rules! str_expectation {
         check |$actual:ident, $operand:ident| $check:expr;
         relations $relation:literal, $negated:literal;
         role $role:ident;
+        $(#[$constructor_attr:meta])*
+        constructor $constructor:ident;
     ) => {
         $(#[$attr])*
         #[derive(Debug, Clone)]
         pub struct $name<E>(E);
+
+        $(#[$constructor_attr])*
+        #[doc = ""]
+        #[doc = concat!("This is a convenience constructor for [`", stringify!($name), "::new`].")]
+        #[must_use]
+        pub const fn $constructor<E>($role: E) -> $name<E> {
+            $name::new($role)
+        }
 
         impl<E> $name<E> {
             #[doc = concat!(
@@ -159,6 +171,8 @@ str_expectation! {
     check |actual, expected| actual.eq_ignore_ascii_case(expected);
     relations "is equal to ignoring ASCII case", "is not equal to ignoring ASCII case";
     role expected;
+    /// Matches strings equal to `expected` under ASCII case folding.
+    constructor equal_to_ignoring_ascii_case;
 }
 
 str_expectation! {
@@ -168,6 +182,8 @@ str_expectation! {
     check |actual, expected| actual.contains(expected);
     relations "contains", "does not contain";
     role expected;
+    /// Matches strings containing the substring `expected`.
+    constructor contains;
 }
 
 str_expectation! {
@@ -177,6 +193,8 @@ str_expectation! {
     check |actual, unexpected| !actual.contains(unexpected);
     relations "does not contain", "contains";
     role unexpected;
+    /// Matches strings that do not contain the substring `unexpected`.
+    constructor does_not_contain;
 }
 
 str_expectation! {
@@ -198,6 +216,8 @@ str_expectation! {
     check |actual, expected| actual.starts_with(expected);
     relations "starts with", "does not start with";
     role expected;
+    /// Matches strings starting with `expected`.
+    constructor starts_with;
 }
 
 str_expectation! {
@@ -207,6 +227,8 @@ str_expectation! {
     check |actual, unexpected| !actual.starts_with(unexpected);
     relations "does not start with", "starts with";
     role unexpected;
+    /// Matches strings that do not start with `unexpected`.
+    constructor does_not_start_with;
 }
 
 str_expectation! {
@@ -216,6 +238,8 @@ str_expectation! {
     check |actual, expected| actual.ends_with(expected);
     relations "ends with", "does not end with";
     role expected;
+    /// Matches strings ending with `expected`.
+    constructor ends_with;
 }
 
 str_expectation! {
@@ -225,6 +249,100 @@ str_expectation! {
     check |actual, unexpected| !actual.ends_with(unexpected);
     relations "does not end with", "ends with";
     role unexpected;
+    /// Matches strings that do not end with `unexpected`.
+    constructor does_not_end_with;
+}
+
+/// Counts the non-overlapping occurrences of a substring, like [`str::matches`], and compares the
+/// count with an expected count.
+///
+/// An empty substring occurs at every character boundary, so `""` occurs once more than the
+/// subject has characters.
+///
+/// ```
+/// use assertr::{matchers::string::contains_occurrences, prelude::*};
+///
+/// assert_that!("- to: a\n- to: b").matches(contains_occurrences("- to:", 2));
+/// ```
+#[derive(Debug, Clone)]
+pub struct ContainsOccurrences<E> {
+    substring: E,
+    count: usize,
+}
+
+impl<E> ContainsOccurrences<E> {
+    /// Expects exactly `count` occurrences of `substring`.
+    #[must_use]
+    pub const fn new(substring: E, count: usize) -> Self {
+        Self { substring, count }
+    }
+}
+
+/// Matches strings containing exactly `count` non-overlapping occurrences of `substring`.
+///
+/// This is a convenience constructor for [`ContainsOccurrences::new`].
+#[must_use]
+pub const fn contains_occurrences<E>(substring: E, count: usize) -> ContainsOccurrences<E> {
+    ContainsOccurrences::new(substring, count)
+}
+
+impl<T, E, R> Expectation<T, R> for ContainsOccurrences<E>
+where
+    T: AsRef<str> + ?Sized,
+    E: AsRef<str>,
+    R: ValueRenderer<str> + ValueRenderer<usize>,
+{
+    type Success<'a>
+        = ()
+    where
+        Self: 'a,
+        T: 'a;
+    type Rejection<'a>
+        = (&'a str, &'a str, usize)
+    where
+        Self: 'a,
+        T: 'a;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a T,
+        _: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection<'a>> {
+        let actual = actual.as_ref();
+        let substring = self.substring.as_ref();
+        let count = actual.matches(substring).count();
+        if count == self.count {
+            Ok(())
+        } else {
+            Err((actual, substring, count))
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Membership;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a T, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let substring = rejected.map_or_else(|| self.substring.as_ref(), |(_, (_, it, _))| it);
+        let failure = failure
+            .relations(
+                rejected.map(|(_, (actual, _, _))| render.value(actual)),
+                "contains the substring the expected number of times",
+                "does not contain the substring the expected number of times",
+            )
+            .expected(render.value(substring))
+            .fact(Fact::labelled("Expected count", render.value(&self.count)));
+        match rejected {
+            None => failure,
+            Some((_, (_, _, count))) => {
+                failure.fact(Fact::labelled("Actual count", render.value(&count)))
+            }
+        }
+    }
 }
 
 /// String-specific assertions.
@@ -265,6 +383,18 @@ pub trait StrAssertions<R = DebugRenderer> {
     fn does_not_contain(self, unexpected: impl AsRef<str>) -> Self
     where
         R: ValueRenderer<str>;
+
+    /// Asserts that the subject contains exactly `count` non-overlapping occurrences of
+    /// `substring`, counted like [`str::matches`].
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    ///
+    /// assert_that!("users:\n  - to: default\n  - to: admin").contains_occurrences("- to:", 2);
+    /// ```
+    fn contains_occurrences(self, substring: impl AsRef<str>, count: usize) -> Self
+    where
+        R: ValueRenderer<str> + ValueRenderer<usize>;
 
     /// Asserts that the subject starts with `expected`.
     fn starts_with(self, expected: impl AsRef<str>) -> Self
@@ -337,6 +467,14 @@ impl<S: AsRef<str>, M: Mode, R> StrAssertions<R> for AssertThat<'_, S, M, R> {
     }
 
     #[track_caller]
+    fn contains_occurrences(self, substring: impl AsRef<str>, count: usize) -> Self
+    where
+        R: ValueRenderer<str> + ValueRenderer<usize>,
+    {
+        self.matches(ContainsOccurrences::new(substring, count))
+    }
+
+    #[track_caller]
     fn starts_with(self, expected: impl AsRef<str>) -> Self
     where
         R: ValueRenderer<str>,
@@ -383,10 +521,64 @@ mod tests {
             "FoObAr".must().be_equal_to_ignoring_ascii_case("fOoBaR");
             "foobar".must().contain("foo");
             "foobar".must().not_contain("baz");
+            "foobar".must().contain_occurrences("o", 2);
             "foo bar baz".must().start_with("foo b");
             "foo bar baz".must().not_start_with("oo");
             "foo bar baz".must().end_with("r baz");
             "foo bar baz".must().not_end_with("y");
+        }
+    }
+
+    mod constructors {
+        use crate::{
+            assertions::core::string::{
+                Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
+                EqualToIgnoringAsciiCase, StartsWith,
+            },
+            matchers::{all_of, string},
+            prelude::*,
+        };
+
+        #[test]
+        fn build_the_named_matchers() {
+            let _: EqualToIgnoringAsciiCase<&str> = string::equal_to_ignoring_ascii_case("a");
+            let _: Contains<&str> = string::contains("a");
+            let _: DoesNotContain<&str> = string::does_not_contain("a");
+            let _: StartsWith<&str> = string::starts_with("a");
+            let _: DoesNotStartWith<&str> = string::does_not_start_with("a");
+            let _: EndsWith<&str> = string::ends_with("a");
+            let _: DoesNotEndWith<&str> = string::does_not_end_with("a");
+        }
+
+        #[test]
+        fn match_string_subjects() {
+            assert_that!(String::from("Foo bar baz")).matches(all_of(matchers![
+                string::equal_to_ignoring_ascii_case("foo BAR baz"),
+                string::contains("bar"),
+                string::does_not_contain("qux"),
+                string::starts_with("Foo"),
+                string::does_not_start_with("bar"),
+                string::ends_with("baz"),
+                string::does_not_end_with("bar"),
+            ]));
+        }
+
+        #[cfg(feature = "partial")]
+        #[test]
+        fn select_the_string_family_inside_partial_fields() {
+            struct Failure {
+                message: String,
+            }
+
+            let failure = Failure {
+                message: String::from("boom: config missing"),
+            };
+            assert_that!(failure).matches(partial!(Failure {
+                message: all_of(matchers![
+                    string::starts_with("boom"),
+                    string::contains("config")
+                ]),
+            }));
         }
     }
 
@@ -671,6 +863,51 @@ mod tests {
             assert_that!("foobar").contains("bar");
             assert_that!("foobar").contains("oob");
             assert_that!(String::from("foobar")).contains("oob");
+        }
+    }
+
+    mod contains_occurrences {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!("a-a"), contains_occurrences("a", 1));
+        }
+
+        #[test]
+        fn counts_non_overlapping_occurrences() {
+            assert_that!("a-a-a").contains_occurrences("a", 3);
+            assert_that!("aaa").contains_occurrences("aa", 1);
+            assert_that!(String::from("abc")).contains_occurrences("x", 0);
+            assert_that!("ab").contains_occurrences("", 3);
+        }
+
+        #[test]
+        fn panics_with_both_counts() {
+            assert_that!(|| {
+                assert_that!("a-a")
+                    .with_location(false)
+                    .contains_occurrences("a", 3);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `"a-a"`
+
+                Actual: "a-a"
+
+                does not contain the substring the expected number of times
+
+                Expected: "a"
+
+                Details:
+                  - Expected count: 3
+                  - Actual count: 2
+                -------- assertr --------
+            "#});
         }
     }
 

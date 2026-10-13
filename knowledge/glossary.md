@@ -53,6 +53,7 @@ for detailed requirements and exceptions.
 | [Mapping](assertion-lifecycle.md#projections-and-continuation) | Replace the subject and move the existing state and renderer to the new chain. |
 | [Derivation](assertion-lifecycle.md#projections-and-continuation) | Create a child while retaining the parent. |
 | [Projection](assertion-lifecycle.md#projections-and-continuation) | Select a borrowed part or computed view for a child. |
+| [Projections](assertion-lifecycle.md#projections-and-continuation) | The recorded steps, such as `err()`, leading from a failure's expression to its subject. |
 | [Extraction](assertion-lifecycle.md#continuation-availability) | Check and continue on a selected value. |
 | [Fluent alias](fluent-entry.md#borrowing-and-ownership) | Generated spelling preserving method behavior and bounds. |
 | [Expression capture](fluent-entry.md#scoped-expression-capture) | Record the asserted expression's source text through macros or fluent rewriting. |
@@ -77,6 +78,7 @@ for detailed requirements and exceptions.
 | [Probe](expectation-execution.md#budgets-and-probes) | Evaluation that does not retain built-in diagnostics. |
 | [Expected data](comparison-operands.md#reading-expected-data-again) | A bulk list of operands that must give the same list and comparison values on every access. |
 | [BorrowFor](comparison-operands.md#borrowed-views) | Selects the view borrowed from an operand for a given subject, item, key, value, or bound type. |
+| [ExpectedOperand](comparison-operands.md#borrowed-views) | The bound comparing assertions place on expected values. Implemented for every `BorrowFor` operand, it explains rejected operands. |
 | [Exact unordered assignment](matcher-composition.md#exact-unordered-assignment) | Maximum one-to-one pairing of actual occurrences and expected slots. |
 | [Multiplicity](matcher-composition.md#exact-unordered-assignment) | Occurrence count. |
 
@@ -87,12 +89,13 @@ for detailed requirements and exceptions.
 | [Capability](collection-semantics.md#capability-model) | A trait providing the behavior needed by a group of assertions. |
 | [HasLength](collection-semantics.md#capability-model) | Provides the subject's finite length. |
 | [Collection](collection-semantics.md#capability-model) | Allows repeated traversal of references to the same elements in the same order. |
-| [StableOrder](collection-semantics.md#capability-model) | Makes element positions part of a collection's meaning, as in a list. |
+| [StableOrder](collection-semantics.md#capability-model) | Declares that a collection's type guarantees its iteration order, so element positions are meaningful, as in a list or a sorted set. |
 | [RandomAccess](collection-semantics.md#capability-model) | Stable positions with constant-time indexed access. |
-| [SetLookup](collection-semantics.md#capability-model) | Native membership for unique elements, using the same equivalence as the set. |
+| [SetLookup](collection-semantics.md#capability-model) | Native lookup of the stored element for a borrowed query, in a collection of unique elements, using the same equivalence as the set. |
 | [Map](collection-semantics.md#capability-model) | Allows repeated traversal of the same stored keys and values. |
 | [MapLookup](collection-semantics.md#keyed-maps) | Native borrowed-key lookup capability. |
-| [Map views](collection-semantics.md#key-and-value-views) | `MapKeys` and `MapValues`: order-free collection views of a map's keys or values, created by projection. |
+| [StableEntryOrder](collection-semantics.md#capability-model) | Declares that a map's type guarantees its entry order, which makes its key and value views `StableOrder`. |
+| [Map views](collection-semantics.md#key-and-value-views) | `MapKeys` and `MapValues`: collection views of a map's keys or values, created by projection. Positional only for a `StableEntryOrder` map. |
 | [Reference identity](reference-identity.md#which-address-is-compared) | Pointer equality of the subject or selected `Borrow` target, including pointer metadata. |
 
 ## Diagnostic values

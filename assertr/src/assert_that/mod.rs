@@ -45,6 +45,7 @@ impl DiagnosticSettings {
         Self {
             subject_name: None,
             expression: Expression::Unset,
+            projections: Vec::new(),
             include_location: true,
             callback_caller: None,
             rendering_budget: RenderingBudget::DEFAULT,
@@ -52,12 +53,12 @@ impl DiagnosticSettings {
         }
     }
 
-    /// Inherits everything except the subject name and expression, which describe the parent's
-    /// subject.
+    /// Inherits every setting. The child's projection appends to the inherited projections.
     fn for_child(&self) -> Self {
         Self {
-            subject_name: None,
-            expression: Expression::Unset,
+            subject_name: self.subject_name.clone(),
+            expression: self.expression,
+            projections: self.projections.clone(),
             include_location: self.include_location,
             callback_caller: self.callback_caller,
             rendering_budget: self.rendering_budget,
@@ -87,6 +88,7 @@ impl DiagnosticSettings {
             .then_some(self.callback_caller.unwrap_or(location));
         failure.subject_name.clone_from(&self.subject_name);
         failure.expression = self.expression.explicit();
+        failure.projections.clone_from(&self.projections);
         failure
     }
 }

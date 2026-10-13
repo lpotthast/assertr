@@ -30,7 +30,7 @@ without parsing reports or retaining original Rust values.
 | `facts` | Labelled evidence via `Fact::labelled`, or an unlabelled note via `Fact::note` (no label). |
 | `children`, `constraint`, omission counts | Nested rejections and missing-subject descriptions. A constraint is another `AssertionFailure`. |
 | `path` | Relative typed location within the parent subject. |
-| Subject/caller metadata | Type, name, expression, caller location, detail messages. |
+| Subject/caller metadata | Type, name, expression, projections from the expression to the subject, caller location, detail messages. |
 
 ### Paths
 
@@ -75,7 +75,8 @@ not select a format:
 | Messages, facts, children | `Messages`, `Details`, `Nested failures`, in that order. |
 | Omitted children | Detail note from structured omission count. |
 
-Caller, subject, and expression metadata precede the body. Children indent one level per depth and use
+Caller, subject, expression, and projection metadata precede the body. Projections render as one `Projection:` line of
+method calls, such as ``.err().current_context()``. Children indent one level per depth and use
 [typed path headings](#paths). Like a loose Markdown list, an empty line separates the `Nested failures` items when any
 of them spans several lines. A list of one-line items stays compact. Assertions supply structured fields rather than report text.
 `Debug` prints the same report. `AssertionFailures` displays its failures separated by an empty line. Exact formatting

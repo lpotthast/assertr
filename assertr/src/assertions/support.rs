@@ -257,14 +257,16 @@ pub(crate) fn explain_variant(
 
 impl<T, M: Mode, R: Clone> AssertThat<'_, T, M, R> {
     /// Runs `assertions` on a child over `value`, the successful observation of a preceding
-    /// variant check. A failed check has already been raised, so the callback does not run.
+    /// variant check, recording `step` as its projection. A failed check has already been
+    /// raised, so the callback does not run.
     pub(crate) fn satisfy_success<U>(
         &self,
+        step: &'static str,
         value: Option<&U>,
         assertions: impl for<'a> FnOnce(AssertThat<'a, U, M, R>),
     ) {
         if let Some(value) = value {
-            assertions(self.derive(|_| value));
+            assertions(self.derive_as(step, |_| value));
         }
     }
 }

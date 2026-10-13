@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{borrow::Borrow, marker::PhantomData};
 
 use crate::{
     expectation::{AssertionContext, Evidence, Expectation, MatcherList, composite_items},
@@ -34,22 +34,38 @@ where
     }
 }
 
-impl<A: ?Sized, R, F, L> Expectation<A, R> for PartialMatch<A, F, L>
+/// The pattern fixes the matched type `A`. Any subject borrowing an `A` can be matched, so the
+/// same matcher checks a `User`, a `&User`, or a `Box<User>` without `dereferenced`.
+impl<S, A, R, F, L> Expectation<S, R> for PartialMatch<A, F, L>
 where
+    S: Borrow<A> + ?Sized,
+    A: ?Sized,
     F: Fn(&A) -> bool,
     L: MatcherList<A, R>,
 {
-    composite_items!(A);
+    composite_items!(S);
 
-    fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
-        // A wrong shape skips the fields. The structural fallback stays within the variant scope,
-        // so a rejection always leaves evidence there.
+    fn evaluate(&self, actual: &S, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        let actual: &A = actual.borrow();
+        let mut context = settings.isolated();
+        // A wrong shape skips the fields. The subject itself is rejected, so the evidence has no
+        // variant path. Rendering the subject would need a renderer the pattern does not require,
+        // so `showing_actual` adds it on request.
+        if !(self.shape)(actual) {
+            context.record(|_| {
+                FailureBuilder::new::<A>(FailureKind::Variant)
+                    .relation("is not the expected variant")
+                    .expected(self.name)
+                    .build()
+            });
+            return Err(context.into_evidence());
+        }
+        // The structural fallback stays within the variant scope, so a rejection always leaves
+        // evidence there.
         let evaluate = |context: &mut AssertionContext<'_, R>| {
-            let mut matched = (self.shape)(actual);
-            if matched {
-                for index in 0..self.fields.len() {
-                    matched &= self.fields.evaluate_at(index, actual, context);
-                }
+            let mut matched = true;
+            for index in 0..self.fields.len() {
+                matched &= self.fields.evaluate_at(index, actual, context);
             }
             context.complete(matched, |_| {
                 FailureBuilder::new::<()>(FailureKind::Matching)
@@ -58,7 +74,6 @@ where
                     .build()
             })
         };
-        let mut context = settings.isolated();
         let matched = if let Some(variant) = self.variant {
             context.scoped(PathSegment::Variant(variant), evaluate)
         } else {
@@ -75,7 +90,7 @@ where
 
     fn explain(
         &self,
-        rejected: Option<(&A, Evidence)>,
+        rejected: Option<(&S, Evidence)>,
         failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
@@ -157,7 +172,7 @@ mod tests {
     }
 
     #[test]
-    fn wrong_shapes_skip_fields_and_retain_the_variant_path() {
+    fn wrong_shapes_skip_fields_and_reject_the_subject() {
         let calls = Cell::new(0);
         let matcher = partial_match(
             Option::is_some,
@@ -173,11 +188,66 @@ mod tests {
             .capture(|it| it.matches(&matcher));
 
         assert_that!(calls.get()).is_equal_to(0);
-        assert_that!(failures[0].children[0].path).is_equal_to([PathSegment::Variant("Some")]);
+        assert_that!(failures[0].children[0].path).is_empty();
+        assert_that!(failures[0].children[0].kind).is_equal_to(FailureKind::Variant);
 
         assert_that!(Some(1))
             .with_renderer(NoRenderer)
             .matches(&matcher);
         assert_that!(calls.get()).is_equal_to(1);
+    }
+    #[test]
+    fn borrowing_subjects_are_matched_as_the_pattern_type() {
+        let matcher = partial_match(
+            Option::is_some,
+            crate::matchers![field(
+                |value: &Option<i32>| value.as_ref(),
+                eq(1),
+                PathSegment::TupleIndex(0),
+            )],
+            "Option::Some",
+            Some("Some"),
+        );
+        let value = Some(1);
+        assert_that_owned!(&value).matches(&matcher);
+        assert_that!(Box::new(value)).matches(&matcher);
+
+        let failures = assert_that_owned!(&None::<i32>).capture(|it| it.matches(&matcher));
+        assert_that!(failures[0].children[0].relation.as_deref())
+            .is_equal_to(Some("is not the expected variant"));
+    }
+    #[test]
+    #[cfg(feature = "partial")]
+    fn mismatched_variants_name_the_expected_variant() {
+        assert_that!(|| {
+            assert_that!(Err::<i32, &str>("timed out"))
+                .with_location(false)
+                .matches(crate::partial!(variant Ok(eq(1))));
+        })
+        .panics()
+        .message()
+        .is_equal_to(indoc::indoc! {r#"
+            -------- assertr --------
+            Expression: `Err::<i32, &str>("timed out")`
+
+            does not match
+
+            Nested failures:
+              - is not the expected variant
+
+                Expected: Ok
+            -------- assertr --------
+        "#});
+    }
+
+    #[test]
+    #[cfg(feature = "partial")]
+    fn showing_actual_renders_the_mismatched_subject() {
+        let failures = assert_that!(Err::<i32, &str>("timed out")).capture(|it| {
+            it.matches(matchers::showing_actual(crate::partial!(
+                variant Ok(eq(1))
+            )))
+        });
+        assert_that!(failures[0].to_string()).contains("Actual: Err(\n    \"timed out\",\n)");
     }
 }

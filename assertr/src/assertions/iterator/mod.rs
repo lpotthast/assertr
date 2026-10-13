@@ -19,7 +19,7 @@ mod tests;
 use alloc::{collections::VecDeque, vec::Vec};
 use core::{borrow::Borrow, marker::PhantomData, panic::Location};
 
-pub(crate) use cardinality::{CountScan, IsExhaustedScan, IsNotExhaustedScan};
+pub(crate) use cardinality::{CountMatchingScan, CountScan, IsExhaustedScan, IsNotExhaustedScan};
 pub(crate) use membership::{
     ContainsAllScan, ContainsMatchingScan, ContainsScan, DoesNotContainMatchingScan,
     DoesNotContainScan,

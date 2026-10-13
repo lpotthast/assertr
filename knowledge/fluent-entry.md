@@ -65,7 +65,8 @@ Implementation: [macro](../assertr-macros/src/fluent_expressions/mod.rs) and
 ### Pending attachment
 
 Capture roots record privately whether expression text can be attached later. Mapping and renderer changes preserve
-that state. Derivation clears it, and an explicit expression from `__private::with_expression` overrides it. Until attachment, `AssertionFailures` records which
+that state, and so do derived children, whose failures receive the root's text too. An explicit expression from
+`__private::with_expression` overrides it. Until attachment, `AssertionFailures` records which
 failures can receive the text:
 
 - Public expression fields show `None`, never a placeholder.

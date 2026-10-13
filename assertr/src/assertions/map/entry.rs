@@ -1,26 +1,28 @@
 use crate::{
     assertions::map::{Map, MapLookup},
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Evidence, Expectation, context::unsatisfied},
+    expectation::{
+        AssertionContext, Evidence, Expectation, ExpectedOperand, context::unsatisfied,
+        operand_view,
+    },
     failure::{FailureBuilder, FailureKind, PathSegment},
     renderer::{RenderingContext, ValueRenderer},
 };
 
 /// A value matcher under one native map key query.
 ///
-/// `K` stores the supplied operand. Its [`BorrowFor`] view is selected using the map
-/// key type as context. Evaluation borrows that view once for native lookup and the matcher path.
-/// Only the view and nested matcher need rendering capabilities. See [`super::MapAssertions`]
-/// for custom operand registration and lookup requirements.
+/// `K` stores the supplied operand. Its [`BorrowFor`](crate::borrow_for::BorrowFor) view is
+/// selected using the map key type as context. Evaluation borrows that view once for native lookup
+/// and the matcher path. Only the view and nested matcher need rendering capabilities. See
+/// [`super::MapAssertions`] for custom operand registration and lookup requirements.
 #[derive(Debug, Clone)]
 pub struct Entry<K, M> {
     pub(super) key: K,
     pub(super) matcher: M,
 }
 
-/// The rejection of [`entry`](crate::matchers::entry) and
-/// [`map::ContainsEntryMatching`](crate::matchers::map::ContainsEntryMatching): the stored key
-/// that was found, if any, and the evidence explaining the rejection.
+/// The rejection of [`entry`](crate::matchers::entry) and of
+/// [`MapAssertions::contains_entry_matching`](crate::assertions::MapAssertions::contains_entry_matching):
+/// the stored key that was found, if any, and the evidence explaining the rejection.
 ///
 /// `K` is the map's key type. When the key is present but its value was rejected, the rejection
 /// borrows the stored key and holds the value matcher's nested failures. When the key is missing,
@@ -132,8 +134,8 @@ where
 
 impl<MapType, R, K, M> Expectation<MapType, R> for Entry<K, M>
 where
-    MapType: Map + MapLookup<<K as BorrowFor<<MapType as Map>::Key>>::View> + ?Sized,
-    K: BorrowFor<MapType::Key>,
+    MapType: Map + MapLookup<<K as ExpectedOperand<<MapType as Map>::Key>>::View> + ?Sized,
+    K: ExpectedOperand<MapType::Key>,
     M: Expectation<MapType::Value, R>,
     R: ValueRenderer<K::View>,
 {
@@ -153,7 +155,7 @@ where
         actual: &'a MapType,
         context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let query = borrow_for::<MapType::Key, _>(&self.key);
+        let query = operand_view::<MapType::Key, _>(&self.key);
         evaluate_entry(actual, query, &self.matcher, context)
     }
 
@@ -167,7 +169,7 @@ where
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
         explain_entry::<MapType::Value, _, _, _>(
-            || borrow_for::<MapType::Key, _>(&self.key),
+            || operand_view::<MapType::Key, _>(&self.key),
             &self.matcher,
             rejected.map(|(_, rejection)| rejection.evidence),
             failure,
@@ -186,11 +188,11 @@ pub(super) fn record_entry<'a, Mp, StoredKey, K, M, R>(
 ) -> (bool, Option<&'a Mp::Key>)
 where
     Mp: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-    K: BorrowFor<StoredKey>,
+    K: ExpectedOperand<StoredKey>,
     M: Expectation<Mp::Value, R>,
     R: ValueRenderer<K::View>,
 {
-    match evaluate_entry(actual, borrow_for::<StoredKey, _>(key), matcher, context) {
+    match evaluate_entry(actual, operand_view::<StoredKey, _>(key), matcher, context) {
         Ok(key) => (true, Some(key)),
         Err(EntryRejection { key, evidence }) => {
             context.append(evidence);

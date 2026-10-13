@@ -149,7 +149,7 @@ impl<T, M: Mode, R> PollAssertions<T, M, R> for AssertThat<'_, Poll<T>, M, R> {
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.satisfy_success(self.test_assertion(&IsReady), assertions);
+        self.satisfy_success("ready()", self.test_assertion(&IsReady), assertions);
         self
     }
 }
@@ -170,8 +170,9 @@ pub trait PollExtractAssertions<'t, T, R = DebugRenderer> {
 impl<'t, T, R> PollExtractAssertions<'t, T, R> for AssertThat<'t, Poll<T>, Panic, R> {
     #[track_caller]
     fn ready(self) -> AssertThat<'t, T, Panic, R> {
-        self.matches(IsReady)
-            .map(|actual| project_checked(actual, ready, ready_ref))
+        self.matches(IsReady).map_as("ready()", |actual| {
+            project_checked(actual, ready, ready_ref)
+        })
     }
 }
 

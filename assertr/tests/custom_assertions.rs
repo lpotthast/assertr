@@ -1665,8 +1665,7 @@ mod map_query_operands {
             .with_renderer(QueryRenderer)
             .capture(|it| {
                 it.matches(entry(Query("a"), eq(2)))
-                    // A single native &str query needs no BorrowFor registration for &str.
-                    .contains_entry_matching("a", eq(2))
+                    .contains_entry_matching(&query, eq(2))
             });
         assert_that!(failures).has_length(2);
         for failure in &failures {
@@ -1925,8 +1924,8 @@ mod custom_capabilities {
         }
 
         impl SetLookup for CustomSet {
-            fn contains_element(&self, element: &i32) -> bool {
-                self.0.contains(element)
+            fn get_element(&self, element: &i32) -> Option<&i32> {
+                self.0.iter().find(|it| *it == element)
             }
         }
 
@@ -1939,6 +1938,7 @@ mod custom_capabilities {
             .is_subset_of(CustomSet(vec![1, 2, 3, 4]))
             .is_superset_of(CustomSet(vec![1]))
             .is_disjoint_from(CustomSet(vec![9]))
+            .is_subset_of([1, 2, 3, 4])
             .has_length(3);
 
         let failures = assert_that!(CustomSet(vec![1, 2, 3]))

@@ -30,7 +30,8 @@ each feature enables. [CI](../.github/workflows/ci.yml) and [Justfile](../Justfi
 | `num` | Numeric assertions. |
 | `libm` | Floating-point classification checks when `num` is enabled without `std`. Neither `libm` nor `std` implicitly enables `num`. |
 | `jiff`, `tokio`, `program`, `reqwest`, `http` | Enable `std` for wrapped std-only dependencies. `reqwest` also enables `http`, because its header values are `http` types. |
-| `rootcause`, `serde-json`, `serde-toml`, `serde` | Support embedded `no_std` with `alloc` without enabling runtime `std`. `std` enables the `std` features of `serde_json` and `toml` through weak edges. `serde` combines JSON and TOML. |
+| `tokio-process` | Enables `tokio` and tokio's `process` feature for `tokio::process::Command` assertions. Kept apart from `tokio`, whose other integrations need no process driver. |
+| `rootcause`, `serde-json`, `serde-toml`, `serde` | Support embedded `no_std` with `alloc` without enabling runtime `std`. `serde-json` adds JSON value assertions and makes JSON objects maps. `std` enables the `std` features of `serde_json` and `toml` through weak edges. `serde` combines JSON and TOML. |
 | `thirtyfour` | Enables `std` and typed WebDriver assertions, without selecting an HTTP client, TLS backend, or browser manager. |
 | `thirtyfour-cdp` | Adds Chromium description reads using typed CDP commands and serde derives. |
 | `full` | Every optional API and integration. |

@@ -5,6 +5,81 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.0] - 2026-10-13
+
+### Added
+
+- `BTreeSet` supports order-sensitive assertions such as `contains_exactly`, `starts_with`, `first`, and `last`. It
+  always yields its elements in ascending order, so their positions are meaningful. `StableOrder` now means that a
+  collection's type guarantees its iteration order. Hash sets and heaps remain order-free.
+- `StableEntryOrder` declares that a map's type guarantees its entry order. `BTreeMap` implements it, which makes its
+  `keys()` and `values()` views `StableOrder`, so `assert_that!(map).keys().contains_exactly(["a", "b"])` works.
+- Typed rootcause reports such as `Report<MyError>` continue with their context through `current_context()`, which needs
+  no type parameter and works in every mode, and `has_current_context_satisfying(..)`. The
+  `matchers::report::current_context(..)` matcher applies a matcher to the context, for example inside `each(..)`.
+- `does_not_have_current_context_type::<E>()` asserts that a report's current context has a different type.
+- `matchers::ne(..)` complements `eq(..)`. `matchers::string` gains the constructors `contains`, `does_not_contain`,
+  `starts_with`, `does_not_start_with`, `ends_with`, `does_not_end_with`, and `equal_to_ignoring_ascii_case`, so a
+  `partial!` field can check a string without a `satisfying` closure, whose `contains` is ambiguous between strings and
+  collections.
+- Command assertions `has_program`, `does_not_have_arg`, and `has_env`, and the projections `program()`, `args()`,
+  `envs()`, and `current_dir()`, which continue with the general assertion families. They apply to every `StdCommand`:
+  `std::process::Command`, `tokio::process::Command` with the new `tokio-process` feature, and custom command builders
+  that expose their standard command.
+- `contains_occurrences(substring, count)` asserts how often a string contains a substring, counting non-overlapping
+  occurrences like `str::matches`. `matchers::string::contains_occurrences(..)` is the matcher form.
+- `contains_any_of(..)` and `does_not_contain_any_of(..)` check collections of any kind against a list of values. The
+  negative form reports every unexpected value it found.
+- `matchers::showing_actual(..)` adds the rendered subject to the rejection of any matcher. It shows the actual value of
+  a `partial!` variant mismatch or of a failing `each(..)`, which render only the parts they check.
+- `renderer::Opaque<T>` wraps a value that cannot be rendered, so diagnostics show its type name. It makes `is_err()`
+  and `err()` usable on results whose `Ok` type has no `Debug` implementation, as in
+  `assert_that_owned!(result.map(Opaque::new)).err()`.
+- JSON value assertions with the `serde-json` feature: `has_pointer` and `is_null` checks, and the panic-mode
+  extractions `pointer("/a/0")`, `str()`, `i64()`, `u64()`, `f64()`, `bool()`, `array()`, and `object()`, which continue
+  with the selected content. JSON objects implement `Map` and `MapLookup`, so map assertions apply to them. The
+  `matchers::json` namespace holds the expectations.
+- String literals compare with `OsStr`, `OsString`, and `&OsStr` subjects and elements, so
+  `assert_that!(command).program().is_equal_to("cargo")` and `.args().contains_exactly(["build", "--locked"])` work.
+  With `serde-json`, JSON values compare with strings, numbers, and booleans, as in
+  `assert_that!(value).pointer("/name").is_equal_to("Ada")` or `.contains_entry("retries", 3)` on a JSON object. This
+  needs `borrow-for` 0.1.3. With `serde-json`, a number or boolean expected value can also be compared with a JSON value,
+  so it no longer infers an otherwise unconstrained subject type on its own: annotate such a subject, as in
+  `Err::<u32, _>(..)`.
+- `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
+  failure reports the matching elements.
+
+### Changed
+
+- Comparing assertions and matchers bound their expected values with the new `expectation::ExpectedOperand<T>`, which
+  every `BorrowFor<T>` operand implements. An unsupported operand now fails to compile with "`&str` cannot be used as an
+  expected value for `i32`" and suggestions, instead of listing unrelated `BorrowFor` implementations.
+- **Breaking:** Single-key map assertions (`contains_key`, `does_not_contain_key`, `contains_entry`,
+  `contains_entry_matching`, `contains_entry_satisfying`, and `does_not_contain_entry`) and the matchers `ContainsKey`,
+  `DoesNotContainKey`, `ContainsEntry`, and `DoesNotContainEntry` take their key by value through `BorrowFor<K>`, like
+  the bulk methods and `entry(..)`. `contains_key(1)`, `contains_key("a")` on `String` keys, and `contains_key(&key)`
+  all work. A custom query type needs a `BorrowFor` implementation, and keys of `&str` maps render as `&str`.
+- **Breaking:** `matchers::map::ContainsEntryMatching` is removed. `contains_entry_matching` uses `entry(..)`.
+- **Breaking:** `SetLookup` takes a borrowed query type, `SetLookup<Q = Item>`, and its required method is
+  `get_element(&Q) -> Option<&Item>`, returning the stored element like `BTreeSet::get`. `contains_element` is removed.
+  In return, `is_subset_of`, `is_superset_of`, and `is_disjoint_from` and their matchers accept any collection as the
+  other side, such as an array or a vector, with elements selecting a borrowed view like other expected values:
+  `assert_that!(roles).is_subset_of(["read", "write"])` works for a `HashSet<String>`. Elements are looked up in the
+  subject only. `SetAssertions` gains the associated type `Set`.
+- Failures of derived chains and extractions keep the subject name and the expression of their root chain, and report
+  how they reached their subject on a new `Projection:` line, such as ``Projection: `.err().current_context()` ``.
+  `AssertionFailure::projections` holds these steps. Arbitrary mappings record their method with elided arguments, such
+  as `derive(..)`.
+- A `partial!` subject of another variant is reported as "is not the expected variant" with the expected constructor,
+  instead of an unsatisfied structure constraint at the variant's path.
+- **Breaking:** `each(..)` requires a `StableOrder` collection and locates every failing element at its position, such
+  as `At [2]:`. The new `each_in_any_order(..)` keeps the previous order-free behavior for any collection, such as a
+  `HashSet`.
+- A `partial!` matcher accepts every subject that borrows its pattern's type, such as the `&User` returned by
+  `Vec::first`, a `Box<User>`, or a reference-typed field, without `dereferenced(..)`. The compile error for a matcher
+  of
+  the wrong subject type now also suggests `dereferenced(..)` for reference and smart-pointer subjects.
+
 ## [0.8.0] - 2026-10-11
 
 ### Added
@@ -245,7 +320,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
 - **Breaking:** Payload extraction (`downcast` and `downcast_ref`) moves from `BoxAssertions` and
   `PanicValueAssertions` to `BoxExtractAssertions`, which covers boxed `dyn Any` payloads and `PanicValue`.
-  `BoxAssertions` keeps the non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import `BoxExtractAssertions` or use the prelude.
+  `BoxAssertions` keeps the non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import
+  `BoxExtractAssertions` or use the prelude.
 - **Breaking:** `RootcauseReportAssertions`, `RootcauseDynamicReportAssertions`, and
   `RootcauseDynamicReportExtractAssertions` cover both `Report` and `ReportRef` subjects. Replace imports of
   `RootcauseReportRefAssertions`, `RootcauseDynamicReportRefAssertions`, and

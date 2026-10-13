@@ -49,13 +49,17 @@ pub(crate) mod context;
 pub(crate) mod dereferenced;
 pub(crate) mod field;
 pub(crate) mod lists;
+pub(crate) mod operand;
 pub(crate) mod predicate;
 pub(crate) mod satisfying;
+pub(crate) mod showing_actual;
 
 use alloc::{boxed::Box, vec::Vec};
 
 pub use context::AssertionContext;
 pub use lists::MatcherList;
+pub use operand::ExpectedOperand;
+pub(crate) use operand::operand_view;
 
 pub use crate::assertions::map::EntryMatcherList;
 use crate::{
@@ -121,7 +125,8 @@ pub struct Evidence {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an expectation for `{T}`",
     label = "cannot check `{T}` with `{Self}`",
-    note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`"
+    note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`",
+    note = "for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`"
 )]
 pub trait Expectation<T: ?Sized, R = DebugRenderer> {
     /// What a passing check observed, such as a parsed value or a lock guard. Use `()` when there

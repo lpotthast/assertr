@@ -263,13 +263,14 @@ impl<P: Payload, M: Mode, R> BoxAssertions for AssertThat<'_, P, M, R> {
 impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic, R> {
     #[track_caller]
     fn downcast<E: 'static>(self) -> AssertThat<'t, E, Panic, R> {
-        self.matches(IsOfType::<E>::new()).map(|actual| {
-            project_checked(
-                actual,
-                |payload| payload.into_any().downcast::<E>().ok().map(|value| *value),
-                |payload| payload.payload().downcast_ref::<E>(),
-            )
-        })
+        self.matches(IsOfType::<E>::new())
+            .map_as("downcast()", |actual| {
+                project_checked(
+                    actual,
+                    |payload| payload.into_any().downcast::<E>().ok().map(|value| *value),
+                    |payload| payload.payload().downcast_ref::<E>(),
+                )
+            })
     }
 
     #[track_caller]
@@ -278,12 +279,12 @@ impl<'t, P: Payload, R> BoxExtractAssertions<'t, R> for AssertThat<'t, P, Panic,
         R: Clone,
     {
         let value = self.require(&const { IsOfType::<E>::new() });
-        self.derive_owned(|_| value)
+        self.derive_owned_as("downcast_ref()", |_| value)
     }
 
     #[track_caller]
     fn message(self) -> AssertThat<'t, String, Panic, R> {
-        self.matches(HasPanicMessage).map(|actual| {
+        self.matches(HasPanicMessage).map_as("message()", |actual| {
             let message = match actual {
                 Actual::Owned(payload) => into_message(payload.into_any()),
                 Actual::Borrowed(payload) => panic_message(payload.payload()).map(String::from),

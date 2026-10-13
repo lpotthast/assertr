@@ -4,8 +4,7 @@ use super::{
 };
 use crate::{
     assertions::{HasLength, collection::Collection},
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{Evidence, Expectation},
+    expectation::{Evidence, Expectation, ExpectedOperand, operand_view},
     failure::{Fact, PathSegment},
     renderer::CollectionPresentation,
 };
@@ -114,7 +113,7 @@ where
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E::View>,
-    E: BorrowFor<T>,
+    E: ExpectedOperand<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = (Tail<I::Item>, Vec<bool>, usize);
@@ -136,7 +135,7 @@ where
         let mut tail = Tail::new(PREVIEW_CAPACITY);
         for item in iterator {
             for (index, expected) in self.expected.iter().enumerate() {
-                if !found[index] && item.borrow().eq(borrow_for::<T, _>(expected)) {
+                if !found[index] && item.borrow().eq(operand_view::<T, _>(expected)) {
                     found[index] = true;
                     remaining -= 1;
                 }
@@ -365,7 +364,7 @@ mod tests {
     use core::cell::Cell;
 
     use super::*;
-    use crate::{prelude::*, renderer::RenderedBody};
+    use crate::{borrow_for::BorrowFor, prelude::*, renderer::RenderedBody};
 
     struct Operand<'a> {
         value: i32,

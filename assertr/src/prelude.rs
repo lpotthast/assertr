@@ -19,10 +19,13 @@ pub use crate::assertions::ThirtyfourWebElementAssertions;
 pub use crate::assertions::{AsyncFnOnceAssertions, FnOnceAssertions};
 #[cfg(feature = "std")]
 pub use crate::assertions::{
-    CommandAssertions, EventualAssertions, MutexAssertions, PathAssertions, Patience,
+    CommandAssertions, CommandProjectionAssertions, EventualAssertions, MutexAssertions,
+    PathAssertions, Patience,
 };
 #[cfg(feature = "http")]
 pub use crate::assertions::{HttpHeaderValueAssertions, HttpHeaderValueExtractAssertions};
+#[cfg(feature = "serde-json")]
+pub use crate::assertions::{JsonValueAssertions, JsonValueExtractAssertions};
 #[cfg(feature = "program")]
 pub use crate::assertions::{Program, ProgramAssertions, ProgramExtractAssertions};
 #[cfg(feature = "reqwest")]
@@ -30,7 +33,7 @@ pub use crate::assertions::{ReqwestResponseAssertions, ReqwestResponseExtractAss
 #[cfg(feature = "rootcause")]
 pub use crate::assertions::{
     RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
-    RootcauseReportAssertions,
+    RootcauseReportAssertions, RootcauseTypedReportAssertions,
 };
 #[cfg(feature = "jiff")]
 pub use crate::assertions::{SignedDurationAssertions, SpanAssertions, ZonedAssertions};

@@ -53,7 +53,8 @@ and failure handling.
 |---|---|---|
 | `all_of` | Evaluate every branch. | Accept. |
 | `any_of` | Stop at first success. If all fail, report one nested failure ("does not match any alternative") whose children carry zero-based `Branch` facts. | Reject. |
-| `each` | Evaluate every element without positional meaning. | Accept. |
+| `each` | Requires `StableOrder`. Evaluate every element at its `Index` path. | Accept. |
+| `each_in_any_order` | Evaluate every element of any collection without positional meaning, retaining evidence in the collection's rendering order. | Accept. |
 | `contains_matching` | Stop at first matching element. A rejection stays one nested failure ("does not contain a matching element"), also when composed. | Reject. |
 | `does_not_contain_matching` | Probe every element and identify unexpected matches. | Accept. |
 | Positional collection matchers | Evaluate all available positions in each candidate window. Contiguous search stops at the first successful window. A rejected search reports "does not contain these elements contiguously" with one "does not match in this window" group per retained window, each carrying a `Window start` fact. | Empty criteria accept except exact matching against nonempty input. |
@@ -97,6 +98,11 @@ through this separate capture.
 Ordinary assertion callbacks may accept `FnOnce` and retain their method's mode.
 [`AssertThat::satisfies`](assertion-lifecycle.md#projections-and-continuation) projects and continues immediately.
 `satisfying` constructs an expectation for later evaluation.
+
+The callback is type-checked before the matcher meets its subject, so its subject type is still an inference variable
+inside the closure body. Methods offered by several blanket-implemented assertion traits, such as `contains` on
+strings, collections, and iterators, are then ambiguous (`E0034`). Subject namespaces therefore offer lowercase
+constructors such as `string::contains`, whose expectation types fix the subject family without a closure.
 
 ## Searches
 
@@ -145,6 +151,8 @@ Pair evaluation and report assembly are in
 ## Structural macros
 
 `partial!` emits Rust patterns and borrowed projections. Only selected fields need comparison and rendering capabilities.
+The pattern infers the matched type, and the matcher accepts any subject that borrows it, so references and boxes need no
+`dereferenced` adapter.
 Rust still checks constructor resolution, visibility, field types, and exhaustiveness. Named `..` omits fields. Tuple
 `_` skips one position and tuple `..` must be final.
 
@@ -153,7 +161,10 @@ borrows through the statement. Selected fields, matcher-list elements, and `entr
 Equality requires `eq`, even for expressions that also implement equality.
 [Operand selection](comparison-operands.md#borrowed-views) determines how reference-valued fields and items are compared.
 
-Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including missing-subject descriptions. Constructor
+Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including missing-subject descriptions. A subject of
+another variant skips the fields and is rejected as "is not the expected variant", naming the expected constructor
+without a variant path. The pattern needs no renderer for the whole subject, so this evidence does not show the actual
+value. `showing_actual` adds it to any matcher's rejection on request, at the cost of a renderer for the subject. Constructor
 paths support Rust's qualified and absolute forms. `variant::Type` means the optional marker followed by an absolute path.
 Use `r#variant::Type` for a module named `variant`. Bare constructors named `variant` remain ordinary constructors.
 

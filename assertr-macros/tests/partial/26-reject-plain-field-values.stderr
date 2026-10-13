@@ -8,6 +8,7 @@ error[E0277]: `{integer}` is not an expectation for `i32`
    |
    = help: the trait `Expectation<i32>` is not implemented for `{integer}`
    = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+   = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
    = help: the following other types implement trait `Expectation<T, R>`:
              `&D` implements `Expectation<T, R>`
              `AllOf<L>` implements `Expectation<A, R>`
@@ -15,8 +16,8 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `Anything` implements `Expectation<A, R>`
              `Box<D>` implements `Expectation<T, R>`
              `ContainsAll<E, B>` implements `Expectation<C, R>`
+             `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
              `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-             `ContainsElement<B, E>` implements `Expectation<Range, R>`
            and $N others
    = note: required for `assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>` to implement `Expectation<Named>`
    = note: required for `assertr::__private::Cons<assertr::matchers::Field<Named, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:11:63: 11:68}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Named>`
@@ -38,6 +39,7 @@ error[E0277]: `{integer}` is not an expectation for `i32`
    |
    = help: the trait `Expectation<i32>` is not implemented for `{integer}`
    = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+   = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
    = help: the following other types implement trait `Expectation<T, R>`:
              `&D` implements `Expectation<T, R>`
              `AllOf<L>` implements `Expectation<A, R>`
@@ -45,8 +47,8 @@ error[E0277]: `{integer}` is not an expectation for `i32`
              `Anything` implements `Expectation<A, R>`
              `Box<D>` implements `Expectation<T, R>`
              `ContainsAll<E, B>` implements `Expectation<C, R>`
+             `ContainsAnyOf<E, B>` implements `Expectation<C, R>`
              `ContainsContiguous<E, B>` implements `Expectation<C, R>`
-             `ContainsElement<B, E>` implements `Expectation<Range, R>`
            and $N others
    = note: required for `assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>` to implement `Expectation<Tuple>`
    = note: required for `assertr::__private::Cons<assertr::matchers::Field<Tuple, i32, {closure@$DIR/tests/partial/26-reject-plain-field-values.rs:12:45: 12:50}, {integer}>, assertr::__private::Nil>` to implement `MatcherList<Tuple>`

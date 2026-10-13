@@ -19,7 +19,7 @@
 //! | `Path`, `Command`, `Mutex` (`std`) | `PathAssertions`, `CommandAssertions`, `MutexAssertions` |
 //! | Observations, closures returning a future of a changing value (`std`) | `EventualAssertions`, with builders and retry policies in `eventually` |
 //! | Browser elements (`thirtyfour`) | `ThirtyfourWebElementAssertions`, plus shared reads in `thirtyfour::read` and optional `thirtyfour-cdp` descriptions |
-//! | Integrations | `HttpHeaderValueAssertions` (`http`), `SignedDurationAssertions`, `SpanAssertions`, `ZonedAssertions` (`jiff`), `ProgramAssertions` (`program`), `ReqwestResponseAssertions` (`reqwest`), `RootcauseReportAssertions` (`rootcause`), `TokioMutexAssertions`, `TokioRwLockAssertions`, `TokioWatchReceiverAssertions` (`tokio`) |
+//! | Integrations | `HttpHeaderValueAssertions` (`http`), `SignedDurationAssertions`, `SpanAssertions`, `ZonedAssertions` (`jiff`), `ProgramAssertions` (`program`), `JsonValueAssertions`, `JsonValueExtractAssertions` (`serde-json`), `ReqwestResponseAssertions` (`reqwest`), `RootcauseReportAssertions` (`rootcause`), `TokioMutexAssertions`, `TokioRwLockAssertions`, `TokioWatchReceiverAssertions` (`tokio`) |
 //!
 //! Feature-gated traits appear in the list below when their feature is enabled.
 //!
@@ -40,7 +40,9 @@
 //! | [`RandomAccess`] | Extraction by position with `at` |
 //! | [`SetLookup`] | Set relations such as `is_subset_of` |
 //! | [`Map`] and [`MapLookup`] | Map assertions such as `contains_key` |
+//! | [`StableEntryOrder`] | Positional assertions on the `keys` and `values` views of a map |
 //! | [`NumericDistance`] | Tolerance checks with `is_close_to` |
+//! | `StdCommand` (`std`) | Command assertions such as `has_arg` |
 //!
 //! # Assertion traits
 //!
@@ -69,6 +71,8 @@ pub(crate) mod http;
 pub(crate) mod iterator;
 #[cfg(feature = "jiff")]
 pub(crate) mod jiff;
+#[cfg(feature = "serde-json")]
+pub(crate) mod json;
 pub(crate) mod map;
 #[cfg(feature = "num")]
 pub(crate) mod num;
@@ -101,7 +105,11 @@ pub use http::header_value::{HttpHeaderValueAssertions, HttpHeaderValueExtractAs
 pub use jiff::{
     signed_duration::SignedDurationAssertions, span::SpanAssertions, zoned::ZonedAssertions,
 };
-pub use map::{Map, MapAssertions, MapKeys, MapLookup, MapProjectionAssertions, MapValues};
+#[cfg(feature = "serde-json")]
+pub use json::{JsonValueAssertions, JsonValueExtractAssertions};
+pub use map::{
+    Map, MapAssertions, MapKeys, MapLookup, MapProjectionAssertions, MapValues, StableEntryOrder,
+};
 #[cfg(feature = "num")]
 pub use num::NumAssertions;
 #[cfg(feature = "program")]
@@ -111,7 +119,7 @@ pub use reqwest::response::{ReqwestResponseAssertions, ReqwestResponseExtractAss
 #[cfg(feature = "rootcause")]
 pub use rootcause::report::{
     RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
-    RootcauseReportAssertions,
+    RootcauseReportAssertions, RootcauseTypedReportAssertions,
 };
 pub use set::{SetAssertions, SetLookup};
 #[cfg(feature = "thirtyfour")]
@@ -145,7 +153,7 @@ pub use self::core::{
 };
 #[cfg(feature = "std")]
 pub use self::std::{
-    command::CommandAssertions,
+    command::{CommandAssertions, CommandProjectionAssertions, StdCommand},
     eventually::{EventualAssertions, Patience},
     mutex::MutexAssertions,
     path::PathAssertions,

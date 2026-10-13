@@ -95,7 +95,7 @@ where
     {
         self.test_assertion(&HasElementAt::new(index));
 
-        self.derive(|collection| {
+        self.derive_as("at(..)", |collection| {
             collection
                 .element_at(index)
                 .unwrap_or_else(|| unreachable!("validated index became unavailable"))
@@ -200,6 +200,9 @@ mod tests {
                         });
                     element.has_text_report(formatdoc! {r"
                         -------- assertr --------
+                        Expression: `subject`
+                        Projection: `.at(..)`
+
                         Expected: cus... 6 more characters ...
 
                           Actual: cus... 6 more characters ...

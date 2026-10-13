@@ -28,7 +28,7 @@ pub use imp::{
     ContainsEntry, ContainsExactlyEntries, ContainsKey, ContainsKeys, ContainsValue,
     DoesNotContainEntry, DoesNotContainKey, DoesNotContainValue, ExactEntriesRejection,
 };
-pub use matching::{ContainsEntryMatching, ContainsValueMatching};
+pub use matching::ContainsValueMatching;
 pub use projection::{MapKeys, MapProjectionAssertions, MapValues};
 
 use crate::{assertions::HasLength, renderer::RenderingOrder};
@@ -126,6 +126,32 @@ pub trait Map: HasLength {
     fn entries(&self) -> impl Iterator<Item = (&Self::Key, &Self::Value)>;
 }
 
+/// A [`Map`] whose type guarantees the order in which [`Map::entries`] yields its entries, so the
+/// positions of its keys and values are meaningful.
+///
+/// Implementing `StableEntryOrder` makes the [`keys`](MapProjectionAssertions::keys) and
+/// [`values`](MapProjectionAssertions::values) views
+/// [`StableOrder`](crate::assertions::StableOrder) collections, so order-sensitive assertions such
+/// as `contains_exactly` and `first` apply to them. A `BTreeMap` implements it because it always
+/// yields its entries in ascending key order. A `HashMap` does not, because its iteration order is
+/// unspecified. Iteration that merely happens to be deterministic does not qualify.
+///
+/// ```
+/// use assertr::prelude::*;
+/// use std::collections::BTreeMap;
+///
+/// let limits = BTreeMap::from([("timeout", 30), ("retries", 3)]);
+/// assert_that!(limits).keys().contains_exactly(["retries", "timeout"]);
+/// ```
+///
+/// The trait has no methods. Like [`Map`], it is not part of the prelude.
+#[diagnostic::on_unimplemented(
+    message = "the map does not guarantee its entry order",
+    label = "no stable-entry-order capability",
+    note = "order-sensitive assertions on map views require `StableEntryOrder`; use an order-free assertion such as `contains_exactly_in_any_order` instead"
+)]
+pub trait StableEntryOrder: Map {}
+
 /// Native lookup of a [`Map`] by a borrowed key view `Q`, the capability behind the map assertions
 /// that query keys.
 ///
@@ -215,6 +241,9 @@ impl<K, V> Map for BTreeMap<K, V> {
     }
 }
 
+/// A `BTreeMap` always yields its entries in ascending key order.
+impl<K, V> StableEntryOrder for BTreeMap<K, V> {}
+
 impl<K, Q, V> MapLookup<Q> for BTreeMap<K, V>
 where
     K: Ord + Borrow<Q>,
@@ -263,6 +292,8 @@ where
     }
 }
 
+impl<M> StableEntryOrder for &M where M: StableEntryOrder + ?Sized {}
+
 impl<M, Q> MapLookup<Q> for &M
 where
     M: MapLookup<Q> + ?Sized,
@@ -287,6 +318,8 @@ where
     }
 }
 
+impl<M> StableEntryOrder for &mut M where M: StableEntryOrder + ?Sized {}
+
 impl<M, Q> MapLookup<Q> for &mut M
 where
     M: MapLookup<Q> + ?Sized,
@@ -310,6 +343,8 @@ where
         M::entries(self)
     }
 }
+
+impl<M> StableEntryOrder for Box<M> where M: StableEntryOrder + ?Sized {}
 
 impl<M, Q> MapLookup<Q> for Box<M>
 where

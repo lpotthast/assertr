@@ -431,7 +431,7 @@ impl<'r, R> AssertionContext<'r, R> {
             .with_rendering_budget(self.rendering.budget())
             .with_location(self.include_location)
             .collect_failures(|sink| {
-                assertions(sink.derive(|value| value));
+                assertions(sink.reborrow());
                 sink
             });
         let matched = failures.is_empty();
@@ -601,7 +601,10 @@ mod tests {
         use super::*;
         use crate::{
             __private::field,
-            assertions::{collection::each, core::partial_eq::eq},
+            assertions::{
+                collection::{each, each_in_any_order},
+                core::partial_eq::eq,
+            },
             failure::PathSegment,
             matchers::all_of,
             renderer::RenderingOrder,
@@ -715,7 +718,10 @@ mod tests {
             let mut context =
                 AssertionContext::new(&DebugRenderer, RenderingBudget::default().with_max_items(1))
                     .isolated_for_order(RenderingOrder::SortByRenderedText);
-            let matcher = all_of(matchers![each(eq(9)), each(eq(8))]);
+            let matcher = all_of(matchers![
+                each_in_any_order(eq(9)),
+                each_in_any_order(eq(8))
+            ]);
 
             let result = context.scoped(PathSegment::Field("items"), |context| {
                 context.evaluate(&[3, 2, 1], &matcher)
@@ -741,7 +747,8 @@ mod tests {
         #[test]
         fn scoped_paths_participate_in_sorting_before_truncation() {
             let actual = BTreeSet::from([[1]]);
-            let matcher = each(all_of(matchers![eq([9]), crate::elements_are![eq(9)]]));
+            let matcher =
+                each_in_any_order(all_of(matchers![eq([9]), crate::elements_are![eq(9)]]));
             let paths = [
                 alloc::vec![PathSegment::Field("items")],
                 alloc::vec![PathSegment::Field("items"), PathSegment::Index(0)],

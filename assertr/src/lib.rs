@@ -64,10 +64,11 @@
 //! | `libm`                                          | Floating-point checks like `is_nan` for `num` in `no_std` builds. Does not enable `num`. |
 //! | `partial`                                       | The `partial!` macro for matching selected struct fields.                                |
 //! | `fluent`                                        | The `value.must()` and `value.verify(..)` entry points with fluent method names.         |
-//! | `serde-json`, `serde-toml`                      | `as_json()` and `as_toml()` to assert on a value's serialized form.                      |
+//! | `serde-json`, `serde-toml`                      | `as_json()` and `as_toml()` for serialized forms, and JSON pointer and value assertions. |
 //! | `serde`                                         | Both `serde-json` and `serde-toml`.                                                      |
 //! | `program`                                       | Checks that a program name or path resolves to an executable, like `which`.              |
 //! | `http`, `jiff`, `reqwest`, `rootcause`, `tokio` | Assertions for types of the crate with the same name.                                    |
+//! | `tokio-process`                                 | `Command` assertions for `tokio::process::Command`, in addition to `tokio`.              |
 //! | `thirtyfour`                                    | Async assertions on browser elements, extracting values for ordinary assertions.         |
 //! | `thirtyfour-cdp`                                | Chromium accessibility descriptions, in addition to `thirtyfour`.                        |
 //! | `full`                                          | All of the above.                                                                        |
@@ -387,10 +388,30 @@ use renderer::{DebugRenderer, RenderingBudget};
 /// Field expectation expressions are evaluated once when the matcher is constructed. Pass
 /// `&matcher` to reuse it.
 ///
+/// The pattern determines the matched type, and any subject that borrows it can be matched: the
+/// type itself, a reference, a `Box`, an `Rc`, or an `Arc`. A matcher for `User` therefore checks
+/// the `&User` that `Vec::first` returns, and a nested `partial!` checks a field of type `&User`:
+///
+/// ```
+/// use assertr::{matchers::eq, prelude::*};
+///
+/// struct User {
+///     name: &'static str,
+/// }
+///
+/// let users = vec![User { name: "Alice" }];
+/// assert_that!(users.first()).some().matches(partial!(User { name: eq("Alice") }));
+/// ```
+///
 /// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
 /// positions are wildcards like named `_` fields, and a tuple `..` must be final. Nested collection
 /// and map expectations use [`elements_are!`], [`elements_are_in_any_order!`],
-/// [`each`](crate::matchers::each), and [`entries_are!`].
+/// [`each`](crate::matchers::each), [`each_in_any_order`](crate::matchers::each_in_any_order), and
+/// [`entries_are!`].
+///
+/// A subject of another variant is reported with the expected constructor. The macro needs no
+/// renderer for the whole subject, so wrap the matcher in
+/// [`matchers::showing_actual`](crate::matchers::showing_actual) to show the actual value as well.
 ///
 /// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
 /// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,
@@ -608,13 +629,17 @@ struct ChainState<'t, M: Mode, R> {
 /// A chain detached across an await keeps these settings without its records, so this type holds
 /// no cells and no borrows. It is `Send` and `Sync`.
 struct DiagnosticSettings {
-    /// Optional user-provided subject name shown in failure diagnostics. Derived chains start
-    /// without a name because they describe a new subject.
+    /// Optional user-provided subject name shown in failure diagnostics. Derived chains inherit
+    /// it, because their projections describe their subject relative to it.
     subject_name: Option<String>,
 
     /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
-    /// fluent-expression rewriting. Derived chains start without an expression.
+    /// fluent-expression rewriting. Derived chains inherit it.
     expression: Expression,
+
+    /// The projections, such as `err()` or `derive(..)`, that lead from the value of `expression`
+    /// to this chain's subject, in order. Mappings and derived chains append to them.
+    projections: Vec<&'static str>,
 
     /// Whether failures record the assertion caller's file, line, and column. Derived chains
     /// inherit this setting. Tests can disable it when comparing exact failure reports.
