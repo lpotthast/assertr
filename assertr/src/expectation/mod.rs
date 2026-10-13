@@ -121,7 +121,8 @@ pub struct Evidence {
 #[diagnostic::on_unimplemented(
     message = "`{Self}` is not an expectation for `{T}`",
     label = "cannot check `{T}` with `{Self}`",
-    note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`"
+    note = "to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`",
+    note = "for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`"
 )]
 pub trait Expectation<T: ?Sized, R = DebugRenderer> {
     /// What a passing check observed, such as a parsed value or a lock guard. Use `()` when there

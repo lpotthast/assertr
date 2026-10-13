@@ -1,4 +1,4 @@
-use core::marker::PhantomData;
+use core::{borrow::Borrow, marker::PhantomData};
 
 use crate::{
     expectation::{AssertionContext, Evidence, Expectation, MatcherList, composite_items},
@@ -34,14 +34,19 @@ where
     }
 }
 
-impl<A: ?Sized, R, F, L> Expectation<A, R> for PartialMatch<A, F, L>
+/// The pattern fixes the matched type `A`. Any subject borrowing an `A` can be matched, so the
+/// same matcher checks a `User`, a `&User`, or a `Box<User>` without `dereferenced`.
+impl<S, A, R, F, L> Expectation<S, R> for PartialMatch<A, F, L>
 where
+    S: Borrow<A> + ?Sized,
+    A: ?Sized,
     F: Fn(&A) -> bool,
     L: MatcherList<A, R>,
 {
-    composite_items!(A);
+    composite_items!(S);
 
-    fn evaluate(&self, actual: &A, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+    fn evaluate(&self, actual: &S, settings: &AssertionContext<'_, R>) -> Result<(), Evidence> {
+        let actual: &A = actual.borrow();
         // A wrong shape skips the fields. The structural fallback stays within the variant scope,
         // so a rejection always leaves evidence there.
         let evaluate = |context: &mut AssertionContext<'_, R>| {
@@ -75,7 +80,7 @@ where
 
     fn explain(
         &self,
-        rejected: Option<(&A, Evidence)>,
+        rejected: Option<(&S, Evidence)>,
         failure: FailureBuilder,
         context: &AssertionContext<'_, R>,
     ) -> FailureBuilder {
@@ -179,5 +184,24 @@ mod tests {
             .with_renderer(NoRenderer)
             .matches(&matcher);
         assert_that!(calls.get()).is_equal_to(1);
+    }
+    #[test]
+    fn borrowing_subjects_are_matched_as_the_pattern_type() {
+        let matcher = partial_match(
+            Option::is_some,
+            crate::matchers![field(
+                |value: &Option<i32>| value.as_ref(),
+                eq(1),
+                PathSegment::TupleIndex(0),
+            )],
+            "Option::Some",
+            Some("Some"),
+        );
+        let value = Some(1);
+        assert_that_owned!(&value).matches(&matcher);
+        assert_that!(Box::new(value)).matches(&matcher);
+
+        let failures = assert_that_owned!(&None::<i32>).capture(|it| it.matches(&matcher));
+        assert_that!(failures[0].children[0].path).is_equal_to([PathSegment::Variant("Some")]);
     }
 }

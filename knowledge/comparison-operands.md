@@ -44,6 +44,8 @@ and wrapper implementations.
 
 Scalar expectations can evaluate unsized `str` and slices directly. Subjects, fields, and items that are references keep
 their declared types. Use `dereferenced` to check the value behind a reference, box, `String`, or other `Deref` value.
+`partial!` is the exception: its pattern fixes the matched type, and it accepts every subject that implements `Borrow` of
+that type, such as a reference or box.
 Chain storage follows [entry normalization](assertion-lifecycle.md#entry-subject-ownership-and-mode). Generic `.into()`,
 `Default::default()`, and empty expected lists may need explicit types.
 

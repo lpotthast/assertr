@@ -12,6 +12,7 @@ fn main() {
     assert_that!(user).matches(&matcher);
     assert_that!(user).matches(&matcher);
 
-    // This subject is itself a reference, so adapt the matcher to dereference it.
+    // A partial matcher accepts reference subjects directly. Other matchers need an adapter.
+    assert_that_owned!(&user).matches(&matcher);
     assert_that_owned!(&user).matches(dereferenced(&matcher));
 }

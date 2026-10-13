@@ -150,6 +150,8 @@ Pair evaluation and report assembly are in
 ## Structural macros
 
 `partial!` emits Rust patterns and borrowed projections. Only selected fields need comparison and rendering capabilities.
+The pattern infers the matched type, and the matcher accepts any subject that borrows it, so references and boxes need no
+`dereferenced` adapter.
 Rust still checks constructor resolution, visibility, field types, and exhaustiveness. Named `..` omits fields. Tuple
 `_` skips one position and tuple `..` must be final.
 

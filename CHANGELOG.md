@@ -23,6 +23,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `partial!` field can check a string without a `satisfying` closure, whose `contains` is ambiguous between strings and
   collections.
 
+### Changed
+
+- A `partial!` matcher accepts every subject that borrows its pattern's type, such as the `&User` returned by
+  `Vec::first`, a `Box<User>`, or a reference-typed field, without `dereferenced(..)`. The compile error for a matcher of
+  the wrong subject type now also suggests `dereferenced(..)` for reference and smart-pointer subjects.
+
 ## [0.8.0] - 2026-10-11
 
 ### Added

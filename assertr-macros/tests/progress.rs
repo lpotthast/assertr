@@ -42,6 +42,7 @@ mod partial {
         t.pass("tests/partial/30-qualified-variants.rs");
         t.pass("tests/partial/31-invoke-through-reexport.rs");
         t.pass("tests/partial/32-named-wildcards.rs");
+        t.pass("tests/partial/33-match-borrowing-subjects.rs");
 
         // Invalid syntax and fields come before lifetime, inference, and capability boundaries.
         t.compile_fail("tests/partial/17-reject-duplicate-fields.rs");

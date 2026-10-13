@@ -8,6 +8,7 @@ error[E0277]: `{integer}` is not an expectation for `{integer}`
   |
   = help: the trait `Expectation<{integer}>` is not implemented for `{integer}`
   = note: to compare with a plain value, wrap it in `eq(value)`. Other matchers are in `assertr::matchers`
+  = note: for a reference or smart-pointer subject, wrap a matcher of the pointed-to value in `dereferenced(..)`
   = help: the following other types implement trait `Expectation<T, R>`:
             `&D` implements `Expectation<T, R>`
             `AllOf<L>` implements `Expectation<A, R>`

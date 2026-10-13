@@ -205,7 +205,8 @@
 //!
 //! Equality and ordering accept the expected value owned or borrowed, so `eq("hello")` matches both
 //! a `String` and a `&str`. A subject that is a reference keeps its type. Use [`dereferenced`] to
-//! match what a reference, `Box`, `String`, or other `Deref` type points to.
+//! match what a reference, `Box`, `String`, or other `Deref` type points to. `partial!` needs no
+//! adapter, because it matches any subject that borrows its pattern's type.
 //!
 //! Matching borrows the subject. A rendering budget shortens the report but never changes the
 //! result. Matchers can have side effects, since predicates, callbacks, and lock checks run user

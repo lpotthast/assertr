@@ -387,6 +387,21 @@ use renderer::{DebugRenderer, RenderingBudget};
 /// Field expectation expressions are evaluated once when the matcher is constructed. Pass
 /// `&matcher` to reuse it.
 ///
+/// The pattern determines the matched type, and any subject that borrows it can be matched: the
+/// type itself, a reference, a `Box`, an `Rc`, or an `Arc`. A matcher for `User` therefore checks
+/// the `&User` that `Vec::first` returns, and a nested `partial!` checks a field of type `&User`:
+///
+/// ```
+/// use assertr::{matchers::eq, prelude::*};
+///
+/// struct User {
+///     name: &'static str,
+/// }
+///
+/// let users = vec![User { name: "Alice" }];
+/// assert_that!(users.first()).some().matches(partial!(User { name: eq("Alice") }));
+/// ```
+///
 /// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
 /// positions are wildcards like named `_` fields, and a tuple `..` must be final. Nested collection
 /// and map expectations use [`elements_are!`], [`elements_are_in_any_order!`],
