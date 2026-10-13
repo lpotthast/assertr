@@ -46,6 +46,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   the bulk methods and `entry(..)`. `contains_key(1)`, `contains_key("a")` on `String` keys, and `contains_key(&key)`
   all work. A custom query type needs a `BorrowFor` implementation, and keys of `&str` maps render as `&str`.
 - **Breaking:** `matchers::map::ContainsEntryMatching` is removed. `contains_entry_matching` uses `entry(..)`.
+- **Breaking:** `SetLookup` takes a borrowed query type, `SetLookup<Q = Item>`, and its required method is
+  `get_element(&Q) -> Option<&Item>`, returning the stored element like `BTreeSet::get`. `contains_element` is removed.
+  In return, `is_subset_of`, `is_superset_of`, and `is_disjoint_from` and their matchers accept any collection as the
+  other side, such as an array or a vector, with elements selecting a borrowed view like other expected values:
+  `assert_that!(roles).is_subset_of(["read", "write"])` works for a `HashSet<String>`. Elements are looked up in the
+  subject only. `SetAssertions` gains the associated type `Set`.
 - Failures of derived chains and extractions keep the subject name and the expression of their root chain, and report
   how they reached their subject on a new `Projection:` line, such as ``Projection: `.err().current_context()` ``.
   `AssertionFailure::projections` holds these steps. Arbitrary mappings record their method with elided arguments, such

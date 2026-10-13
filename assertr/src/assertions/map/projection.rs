@@ -84,12 +84,13 @@ impl<Mp: StableEntryOrder + ?Sized> StableOrder for MapKeys<'_, Mp> {}
 impl<Mp: StableEntryOrder + ?Sized> StableOrder for MapValues<'_, Mp> {}
 
 /// Membership uses the map's native key lookup, the same equivalence that keeps its keys unique.
-impl<Mp> SetLookup for MapKeys<'_, Mp>
+impl<Mp, Q> SetLookup<Q> for MapKeys<'_, Mp>
 where
-    Mp: MapLookup<<Mp as Map>::Key> + ?Sized,
+    Mp: MapLookup<Q> + ?Sized,
+    Q: ?Sized,
 {
-    fn contains_element(&self, element: &Mp::Key) -> bool {
-        self.0.get_key_value(element).is_some()
+    fn get_element(&self, element: &Q) -> Option<&Mp::Key> {
+        self.0.get_key_value(element).map(|(key, _)| key)
     }
 }
 

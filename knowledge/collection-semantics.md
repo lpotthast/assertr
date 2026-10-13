@@ -30,7 +30,7 @@ implementors must provide the promised behavior and performance.
 | `Collection: HasLength` | `elements()` repeatedly yields references to the same elements in the same order. | Order-free checks. |
 | `StableOrder: Collection` | The type guarantees its iteration order, such as insertion order in a list or ascending order in a sorted set. | Positional checks and indexes in failures. |
 | `RandomAccess: StableOrder` | Constant-time `element_at`, `None` out of bounds. | Indexed extraction. |
-| `SetLookup: Collection` | Unique elements and native membership using the same equivalence that makes elements unique. | Set relations. |
+| `SetLookup<Q>: Collection` | Unique elements and native lookup of the stored element equivalent to a borrowed query `Q`, using the same equivalence that makes elements unique. `Q` defaults to the element type. | Set relations. |
 | `Map: HasLength` | Each traversal returns references to the same stored keys and values. | Map checks that iterate over entries. |
 | `MapLookup<Q>: Map` | Native borrowed-key lookup returning the same stored entries as traversal. | Key and keyed-entry queries. |
 | `StableEntryOrder: Map` | The type guarantees the order in which it yields entries, such as ascending key order. | Positional checks on the key and value views. |
@@ -62,7 +62,7 @@ See [diagnostic rendering](diagnostic-rendering.md#capabilities-and-structure) f
 | `contains_any_of`, `does_not_contain_any_of` | At least one or none of the expected values has a match. An empty list never matches `contains_any_of`. Found unexpected values are reported in expected order. |
 | Ordered exact | Match every position and require equal lengths. Needs `StableOrder`. |
 | Unordered exact | Pair every actual occurrence and every expected slot exactly once, preserving duplicates. Uses [maximum assignment](matcher-composition.md#exact-unordered-assignment). |
-| Set relations | Native `SetLookup` membership and its uniqueness equivalence. |
+| Set relations | Each element of the other side, which can be any collection, selects a `BorrowFor` view of the subject's element type and is looked up in the subject through native `SetLookup`. A subset check identifies the stored elements it found by address, so it needs no lookup in the other side. |
 
 For example, `[1]` contains all of `[1, 1]`, but does not contain exactly those occurrences in any order.
 [Matcher composition](matcher-composition.md#evaluation-and-failure-evidence) explains how matcher-based checks evaluate candidates.
@@ -88,7 +88,7 @@ Exact keyed map checks use native lookup, length, and stored-key identity:
 `HasLength` and `Collection`, so order-free collection checks apply. Both views are `StableOrder` when the map
 implements `StableEntryOrder`, as a `BTreeMap` does, so positional checks see the keys, and the values in key order.
 The views of a `HashMap` stay order-free. The keys
-view is also `SetLookup` when the map implements `MapLookup<Key>`, so set relations use the map's native lookup. The
+view is also `SetLookup<Q>` when the map implements `MapLookup<Q>`, so set relations use the map's native lookup. The
 values view preserves duplicates. Diagnostics present keys as a set and values as a list, both in the map's
 `RENDERING_ORDER`.
 

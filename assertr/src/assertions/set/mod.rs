@@ -6,6 +6,7 @@ mod assertions;
 mod imp;
 
 use alloc::{boxed::Box, collections::BTreeSet};
+use core::borrow::Borrow;
 
 pub use assertions::SetAssertions;
 pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
@@ -17,16 +18,18 @@ use crate::{
     renderer::CollectionPresentation,
 };
 
-/// Native membership lookup for a collection of unique elements, the capability behind the set
-/// relations.
+/// Native lookup of a stored element by a borrowed query `Q`, for a collection of unique
+/// elements. This is the capability behind the set relations.
 ///
 /// Implementing `SetLookup` for your own set type, on top of [`Collection`], makes
 /// [`SetAssertions`] available: `is_subset_of`, `is_superset_of`, and `is_disjoint_from`, plus the
-/// [`IsSubsetOf`], [`IsSupersetOf`], and [`IsDisjointFrom`] matchers. The relations accept any
-/// other `SetLookup` type with the same element type, so your set can be compared with a
-/// `BTreeSet` or a `HashSet`.
+/// [`IsSubsetOf`], [`IsSupersetOf`], and [`IsDisjointFrom`] matchers. The relations look the other
+/// side's elements up in your set, so they accept any collection as the other side: another set,
+/// an array, or a vector. `Q` defaults to the element type. Implement the trait generically over
+/// `Q` when your native lookup accepts borrowed queries, such as `str` for `String` elements:
 ///
 /// ```
+/// use core::borrow::Borrow;
 /// use std::collections::BTreeSet;
 ///
 /// use assertr::{
@@ -36,7 +39,7 @@ use crate::{
 /// };
 ///
 /// #[derive(Debug)]
-/// struct Tags(BTreeSet<&'static str>);
+/// struct Tags(BTreeSet<String>);
 ///
 /// impl HasLength for Tags {
 ///     fn length(&self) -> usize {
@@ -45,7 +48,7 @@ use crate::{
 /// }
 ///
 /// impl Collection for Tags {
-///     type Item = &'static str;
+///     type Item = String;
 ///     const PRESENTATION: CollectionPresentation = CollectionPresentation::set();
 ///
 ///     fn elements(&self) -> impl Iterator<Item = &Self::Item> {
@@ -53,17 +56,21 @@ use crate::{
 ///     }
 /// }
 ///
-/// impl SetLookup for Tags {
-///     fn contains_element(&self, element: &&'static str) -> bool {
-///         self.0.contains(element)
+/// // The bounds are those of the native lookup, here `BTreeSet::get`.
+/// impl<Q: Ord + ?Sized> SetLookup<Q> for Tags
+/// where
+///     String: Borrow<Q>,
+/// {
+///     fn get_element(&self, element: &Q) -> Option<&String> {
+///         self.0.get(element)
 ///     }
 /// }
 ///
-/// let tags = Tags(BTreeSet::from(["rust", "testing"]));
+/// let tags = Tags(BTreeSet::from([String::from("rust"), String::from("testing")]));
 /// assert_that!(tags)
 ///     .contains("rust")
-///     .is_subset_of(BTreeSet::from(["rust", "testing", "docs"]))
-///     .is_disjoint_from(BTreeSet::from(["python"]));
+///     .is_subset_of(["rust", "testing", "docs"])
+///     .is_disjoint_from(["python"]);
 /// ```
 ///
 /// `SetLookup` is not part of the prelude, so import it from
@@ -73,8 +80,10 @@ use crate::{
 /// # Contract
 ///
 /// Implementing this trait declares that the collection holds unique elements and that
-/// [`contains_element`](Self::contains_element) queries membership with the same equivalence that
-/// makes them unique, such as hashing or ordering. Rust cannot check this.
+/// [`get_element`](Self::get_element) finds the stored element equivalent to a query, with the
+/// same equivalence that makes the elements unique, such as hashing or ordering. The returned
+/// reference must point at the element that [`Collection::elements`] yields, because `is_subset_of`
+/// identifies the elements it found by address. Rust cannot check this.
 ///
 /// Set relations use this native lookup. Element assertions such as `contains` and
 /// `contains_exactly_in_any_order` come from [`Collection`] and compare elements with
@@ -87,14 +96,14 @@ use crate::{
 /// in diagnostics, and add `with_order(RenderingOrder::SortByRenderedText)` when iteration order
 /// is arbitrary.
 #[diagnostic::on_unimplemented(
-    message = "the collection has no native set membership lookup",
-    label = "no set-lookup capability",
+    message = "the collection has no native set lookup for `{Q}`",
+    label = "no set-lookup capability for `{Q}`",
     note = "set relations such as `is_subset_of` require `SetLookup`, which declares unique elements and native membership queries; element assertions such as `contains` need only `Collection`"
 )]
-pub trait SetLookup: Collection {
-    /// Whether `element` is a member, using the set's own lookup, such as hashing or ordering,
-    /// rather than a linear scan over [`Collection::elements`].
-    fn contains_element(&self, element: &Self::Item) -> bool;
+pub trait SetLookup<Q: ?Sized = <Self as Collection>::Item>: Collection {
+    /// The stored element equivalent to `element`, if any, found with the set's own lookup, such
+    /// as hashing or ordering, rather than a linear scan over [`Collection::elements`].
+    fn get_element(&self, element: &Q) -> Option<&Self::Item>;
 }
 
 impl<T> Collection for BTreeSet<T> {
@@ -110,9 +119,13 @@ impl<T> Collection for BTreeSet<T> {
 /// meaningful: `first` is the minimum, and `contains_exactly` expects the elements sorted.
 impl<T> StableOrder for BTreeSet<T> {}
 
-impl<T: Ord> SetLookup for BTreeSet<T> {
-    fn contains_element(&self, element: &T) -> bool {
-        BTreeSet::contains(self, element)
+impl<T, Q> SetLookup<Q> for BTreeSet<T>
+where
+    T: Ord + Borrow<Q>,
+    Q: Ord + ?Sized,
+{
+    fn get_element(&self, element: &Q) -> Option<&T> {
+        BTreeSet::get(self, element)
     }
 }
 
@@ -129,44 +142,48 @@ impl<T, S> Collection for std::collections::HashSet<T, S> {
 }
 
 #[cfg(feature = "std")]
-impl<T, S> SetLookup for std::collections::HashSet<T, S>
+impl<T, Q, S> SetLookup<Q> for std::collections::HashSet<T, S>
 where
-    T: core::hash::Hash + Eq,
+    T: core::hash::Hash + Eq + Borrow<Q>,
+    Q: core::hash::Hash + Eq + ?Sized,
     S: core::hash::BuildHasher,
 {
-    fn contains_element(&self, element: &T) -> bool {
-        std::collections::HashSet::contains(self, element)
+    fn get_element(&self, element: &Q) -> Option<&T> {
+        std::collections::HashSet::get(self, element)
     }
 }
 
 /// Makes shared-reference subjects sets in their own right, mirroring the `Collection` impl for
 /// `&C`.
-impl<S> SetLookup for &S
+impl<S, Q> SetLookup<Q> for &S
 where
-    S: SetLookup + ?Sized,
+    S: SetLookup<Q> + ?Sized,
+    Q: ?Sized,
 {
-    fn contains_element(&self, element: &S::Item) -> bool {
-        S::contains_element(self, element)
+    fn get_element(&self, element: &Q) -> Option<&S::Item> {
+        S::get_element(self, element)
     }
 }
 
 /// Makes mutable-reference subjects sets, mirroring the shared-reference implementation.
-impl<S> SetLookup for &mut S
+impl<S, Q> SetLookup<Q> for &mut S
 where
-    S: SetLookup + ?Sized,
+    S: SetLookup<Q> + ?Sized,
+    Q: ?Sized,
 {
-    fn contains_element(&self, element: &S::Item) -> bool {
-        S::contains_element(self, element)
+    fn get_element(&self, element: &Q) -> Option<&S::Item> {
+        S::get_element(self, element)
     }
 }
 
 /// Makes boxed subjects sets, mirroring the shared-reference implementation.
-impl<S> SetLookup for Box<S>
+impl<S, Q> SetLookup<Q> for Box<S>
 where
-    S: SetLookup + ?Sized,
+    S: SetLookup<Q> + ?Sized,
+    Q: ?Sized,
 {
-    fn contains_element(&self, element: &S::Item) -> bool {
-        S::contains_element(self, element)
+    fn get_element(&self, element: &Q) -> Option<&S::Item> {
+        S::get_element(self, element)
     }
 }
 
@@ -192,9 +209,9 @@ mod tests {
             .contains_exactly_in_any_order(expected);
 
         for expected in expected {
-            assert_that!(actual.contains_element(expected)).is_true();
+            assert_that!(actual.get_element(expected)).is_equal_to(Some(expected));
         }
-        assert_that!(actual.contains_element(&42)).is_false();
+        assert_that!(actual.get_element(&42)).is_none();
     }
 
     fn eq_to(expected: i32) -> impl Fn(&i32) -> bool {

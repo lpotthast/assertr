@@ -90,7 +90,7 @@ for detailed requirements and exceptions.
 | [Collection](collection-semantics.md#capability-model) | Allows repeated traversal of references to the same elements in the same order. |
 | [StableOrder](collection-semantics.md#capability-model) | Declares that a collection's type guarantees its iteration order, so element positions are meaningful, as in a list or a sorted set. |
 | [RandomAccess](collection-semantics.md#capability-model) | Stable positions with constant-time indexed access. |
-| [SetLookup](collection-semantics.md#capability-model) | Native membership for unique elements, using the same equivalence as the set. |
+| [SetLookup](collection-semantics.md#capability-model) | Native lookup of the stored element for a borrowed query, in a collection of unique elements, using the same equivalence as the set. |
 | [Map](collection-semantics.md#capability-model) | Allows repeated traversal of the same stored keys and values. |
 | [MapLookup](collection-semantics.md#keyed-maps) | Native borrowed-key lookup capability. |
 | [StableEntryOrder](collection-semantics.md#capability-model) | Declares that a map's type guarantees its entry order, which makes its key and value views `StableOrder`. |
