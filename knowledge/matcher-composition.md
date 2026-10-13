@@ -53,7 +53,8 @@ and failure handling.
 |---|---|---|
 | `all_of` | Evaluate every branch. | Accept. |
 | `any_of` | Stop at first success. If all fail, report one nested failure ("does not match any alternative") whose children carry zero-based `Branch` facts. | Reject. |
-| `each` | Evaluate every element without positional meaning. | Accept. |
+| `each` | Requires `StableOrder`. Evaluate every element at its `Index` path. | Accept. |
+| `each_in_any_order` | Evaluate every element of any collection without positional meaning, retaining evidence in the collection's rendering order. | Accept. |
 | `contains_matching` | Stop at first matching element. A rejection stays one nested failure ("does not contain a matching element"), also when composed. | Reject. |
 | `does_not_contain_matching` | Probe every element and identify unexpected matches. | Accept. |
 | Positional collection matchers | Evaluate all available positions in each candidate window. Contiguous search stops at the first successful window. A rejected search reports "does not contain these elements contiguously" with one "does not match in this window" group per retained window, each carrying a `Window start` fact. | Empty criteria accept except exact matching against nonempty input. |

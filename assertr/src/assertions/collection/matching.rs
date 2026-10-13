@@ -425,9 +425,9 @@ mod tests {
             let failures = assert_that!(vec![vec![2, 3], vec![4]])
                 .with_location(false)
                 .capture(|it| {
-                    it.matches(matchers::each(contains_matching(predicate(|it: &i32| {
-                        *it == 1
-                    }))))
+                    it.matches(matchers::each_in_any_order(contains_matching(predicate(
+                        |it: &i32| *it == 1,
+                    ))))
                 });
             assert_that!(failures).contains_exactly_satisfying([
                 |failure: AssertThat<AssertionFailure, Capture>| {

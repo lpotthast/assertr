@@ -35,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Breaking:** `each(..)` requires a `StableOrder` collection and locates every failing element at its position, such
+  as `At [2]:`. The new `each_in_any_order(..)` keeps the previous order-free behavior for any collection, such as a
+  `HashSet`.
 - A `partial!` matcher accepts every subject that borrows its pattern's type, such as the `&User` returned by
   `Vec::first`, a `Box<User>`, or a reference-typed field, without `dereferenced(..)`. The compile error for a matcher of
   the wrong subject type now also suggests `dereferenced(..)` for reference and smart-pointer subjects.

@@ -406,7 +406,8 @@ use renderer::{DebugRenderer, RenderingBudget};
 /// Named structs, tuple structs, enum variants, and unit constructors are supported. Tuple `_`
 /// positions are wildcards like named `_` fields, and a tuple `..` must be final. Nested collection
 /// and map expectations use [`elements_are!`], [`elements_are_in_any_order!`],
-/// [`each`](crate::matchers::each), and [`entries_are!`].
+/// [`each`](crate::matchers::each), [`each_in_any_order`](crate::matchers::each_in_any_order), and
+/// [`entries_are!`].
 ///
 /// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
 /// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,

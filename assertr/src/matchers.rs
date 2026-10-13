@@ -69,7 +69,7 @@
 //! | Jiff (`jiff`) | `signed_duration`, `span`, `zoned` |
 //! | Programs and reports (`program`, `rootcause`) | `program`, `report` |
 //! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
-//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
+//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`each_in_any_order`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
 //!
 //! Each matcher's page lists the subjects it supports and what it needs to render a failure. This
 //! module is the public home of these types. Import `matchers::*` next to `prelude::*` if you want
@@ -165,7 +165,8 @@
 //!
 //! | Matcher | Passes when |
 //! |---|---|
-//! | [`each(matcher)`](each) | Every element matches. An empty collection passes. |
+//! | [`each(matcher)`](each) | Every element matches. An empty collection passes. Failures name positions. Requires [`StableOrder`](crate::assertions::StableOrder). |
+//! | [`each_in_any_order(matcher)`](each_in_any_order) | Every element matches, without positions, for any collection. |
 //! | [`elements_are!`](crate::elements_are) | The elements match these matchers one to one, in order. Requires [`StableOrder`](crate::assertions::StableOrder). |
 //! | [`elements_are_in_any_order!`](crate::elements_are_in_any_order) | The elements match these matchers one to one, in any order. |
 //! | [`entries_are!`](crate::entries_are) | The map has exactly these keys, and each value matches its matcher. |
@@ -259,9 +260,10 @@ pub use crate::assertions::{
 pub use crate::{
     assertions::{
         collection::{
-            ContainsMatching, DoesNotContainMatching, Each, ElementsAre, ElementsAreInAnyOrder,
-            contains_contiguous_elements, contains_matching, does_not_contain_matching, each,
-            elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
+            ContainsMatching, DoesNotContainMatching, Each, EachInAnyOrder, ElementsAre,
+            ElementsAreInAnyOrder, contains_contiguous_elements, contains_matching,
+            does_not_contain_matching, each, each_in_any_order, elements_are,
+            elements_are_in_any_order, ends_with_elements, starts_with_elements,
         },
         core::{
             partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, ne, one_of},

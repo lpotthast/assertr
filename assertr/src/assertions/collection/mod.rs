@@ -21,7 +21,7 @@ use alloc::{
 };
 
 pub use assertions::CollectionAssertions;
-pub use each::{Each, each};
+pub use each::{Each, EachInAnyOrder, each, each_in_any_order};
 pub use elements_are::{
     ElementsAre, contains_contiguous_elements, elements_are, ends_with_elements,
     starts_with_elements,
