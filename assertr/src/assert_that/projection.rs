@@ -29,11 +29,48 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     // just the target type, as in `.map::<String>(...)`. The same applies to `map_owned`.
     #[must_use]
     pub fn map<U>(self, mapper: impl FnOnce(Actual<T>) -> Actual<U>) -> AssertThat<'t, U, M, R> {
+        self.map_as("map(..)", mapper)
+    }
+
+    /// Maps the subject like [`Self::map`], recording `step` as the projection that produced it.
+    pub(crate) fn map_as<U>(
+        self,
+        step: &'static str,
+        mapper: impl FnOnce(Actual<T>) -> Actual<U>,
+    ) -> AssertThat<'t, U, M, R> {
+        self.map_actual(mapper).projected(step)
+    }
+
+    /// Replaces the subject without recording a projection, for a subject that a recorded step
+    /// already describes, such as the value an extraction checked.
+    pub(crate) fn map_actual<U>(
+        self,
+        mapper: impl FnOnce(Actual<T>) -> Actual<U>,
+    ) -> AssertThat<'t, U, M, R> {
         let AssertThat { actual, state } = self;
         AssertThat {
             actual: mapper(actual),
             state,
         }
+    }
+
+    /// A child borrowing the same subject without recording a projection, for handing the chain
+    /// to a callback that takes ownership of it.
+    pub(crate) fn reborrow(&'t self) -> AssertThat<'t, T, M, R>
+    where
+        R: Clone,
+    {
+        AssertThat {
+            actual: Actual::Borrowed(self.actual()),
+            state: self.state.child(),
+        }
+    }
+
+    /// Records `step`, such as `err()`, as the projection that produced this chain's subject from
+    /// the value of its expression.
+    pub(crate) fn projected(mut self, step: &'static str) -> Self {
+        self.state.settings.projections.push(step);
+        self
     }
 
     /// Maps the subject by value and preserves the chain state.
@@ -44,17 +81,29 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     where
         T: Clone,
     {
-        let AssertThat { actual, state } = self;
-        AssertThat {
-            actual: Actual::Owned(mapper(actual.into_owned())),
-            state,
-        }
+        self.map_as("map_owned(..)", |actual| {
+            Actual::Owned(mapper(actual.into_owned()))
+        })
     }
 
     /// Asynchronously maps the assertion subject to a new owned subject while preserving the chain
     /// state.
     #[must_use]
     pub async fn map_async<U: 't, Fut>(
+        self,
+        mapper: impl FnOnce(Actual<T>) -> Fut,
+    ) -> AssertThat<'t, U, M, R>
+    where
+        Fut: Future<Output = U>,
+    {
+        self.map_async_actual(mapper)
+            .await
+            .projected("map_async(..)")
+    }
+
+    /// Maps the subject like [`Self::map_async`] without recording a projection, like
+    /// [`Self::map_actual`].
+    pub(crate) async fn map_async_actual<U: 't, Fut>(
         self,
         mapper: impl FnOnce(Actual<T>) -> Fut,
     ) -> AssertThat<'t, U, M, R>
@@ -96,10 +145,25 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         't: 'u,
         R: Clone,
     {
+        self.derive_owned_as("derive_owned(..)", mapper)
+    }
+
+    /// Derives a child like [`Self::derive_owned`], recording `step` as the projection that
+    /// produced its subject.
+    pub(crate) fn derive_owned_as<'u, U: 'u>(
+        &'t self,
+        step: &'static str,
+        mapper: impl FnOnce(&'t T) -> U,
+    ) -> AssertThat<'u, U, M, R>
+    where
+        't: 'u,
+        R: Clone,
+    {
         AssertThat {
             actual: Actual::Owned(mapper(self.actual())),
             state: self.state.child(),
         }
+        .projected(step)
     }
 
     /// Derives a child assertion over a borrowed projection of the subject.
@@ -117,9 +181,11 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     /// ```
     ///
     /// The child clones the active renderer and inherits detail messages, rendering budget,
-    /// location settings, and panic presentation. Its subject name and source expression start
-    /// empty. Failures and assertion counts propagate to the parent. Projection itself does not
-    /// count as an assertion, and neither the parent nor its field needs to implement `Clone`.
+    /// location settings, panic presentation, subject name, and source expression. Its failures
+    /// add `derive(..)` to the projections that lead from the expression to the subject, which
+    /// reports show on a `Projection:` line. Failures and assertion counts propagate to the
+    /// parent. Projection itself does not count as an assertion, and neither the parent nor its
+    /// field needs to implement `Clone`.
     ///
     /// In [`Self::capture`], return the parent after checking its children. A child borrows the
     /// parent and cannot replace it as the closure's returned chain:
@@ -153,10 +219,25 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         't: 'u,
         R: Clone,
     {
+        self.derive_as("derive(..)", mapper)
+    }
+
+    /// Derives a child like [`Self::derive`], recording `step` as the projection that produced its
+    /// subject.
+    pub(crate) fn derive_as<'u, U>(
+        &'t self,
+        step: &'static str,
+        mapper: impl FnOnce(&'t T) -> &'u U,
+    ) -> AssertThat<'u, U, M, R>
+    where
+        't: 'u,
+        R: Clone,
+    {
         AssertThat {
             actual: Actual::Borrowed(mapper(self.actual())),
             state: self.state.child(),
         }
+        .projected(step)
     }
 
     /// The async variant of [`Self::derive_owned`].
@@ -190,6 +271,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
             actual: Actual::Owned(mapper(self.actual()).await),
             state: self.state.child(),
         }
+        .projected("derive_async(..)")
     }
 
     // Three `satisfies` variants exist because a higher-ranked mapper bound cannot express that
@@ -205,8 +287,8 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
     ///
     /// Child failures follow the root's mode. They panic immediately in panic mode and join the
     /// collected failures inside [`Self::capture`]. The child preserves the active renderer and
-    /// inherits detail messages, rendering budget, location settings, and panic presentation. Its
-    /// subject name and source expression start empty and can be set on the child.
+    /// inherits detail messages, rendering budget, location settings, panic presentation, subject
+    /// name, and source expression. Its failures show `.satisfies(..)` as their projection.
     ///
     /// A closure cannot forward `#[track_caller]`, so failures raised inside `assertions` are
     /// located at this `satisfies` call rather than at the failing assertion within the closure.
@@ -254,7 +336,22 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
         R: Clone,
     {
-        assertions(self.derive(mapper).located_at_callback(Location::caller()));
+        self.satisfies_as("satisfies(..)", mapper, assertions)
+    }
+
+    /// Checks a projection like [`Self::satisfies`], recording `step` as the projection that
+    /// produced the callback's subject.
+    #[track_caller]
+    pub(crate) fn satisfies_as<U, F, A>(self, step: &'static str, mapper: F, assertions: A) -> Self
+    where
+        for<'a> F: FnOnce(&'a T) -> &'a U,
+        for<'a> A: FnOnce(AssertThat<'a, U, M, R>),
+        R: Clone,
+    {
+        assertions(
+            self.derive_as(step, mapper)
+                .located_at_callback(Location::caller()),
+        );
         self
     }
 
@@ -286,7 +383,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         R: Clone,
     {
         assertions(
-            self.derive_owned(mapper)
+            self.derive_owned_as("satisfies_owned(..)", mapper)
                 .located_at_callback(Location::caller()),
         );
         self
@@ -320,7 +417,7 @@ impl<'t, T, M: Mode, R> AssertThat<'t, T, M, R> {
         R: Clone,
     {
         assertions(
-            self.derive_owned(mapper)
+            self.derive_owned_as("satisfies_ref(..)", mapper)
                 .located_at_callback(Location::caller()),
         );
         self
@@ -409,6 +506,61 @@ mod tests {
             .with_debug_format(|value: &Secret, f| write!(f, "Secret({})", value.0))
             .derive_owned(|secret| Secret(secret.0))
             .is_equal_to(Secret(7));
+    }
+
+    mod projections {
+        use indoc::formatdoc;
+
+        use crate::prelude::*;
+
+        #[test]
+        fn derived_failures_keep_the_expression_and_record_each_projection() {
+            let result: Result<i32, (&str, u8)> = Err(("timeout", 3));
+            assert_that!(|| {
+                assert_that!(result)
+                    .with_location(false)
+                    .err()
+                    .derive(|error| &error.1)
+                    .is_equal_to(4);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                -------- assertr --------
+                Expression: `result`
+                Projection: `.err().derive(..)`
+
+                Expected: 4
+
+                  Actual: 3
+                -------- assertr --------
+            "});
+        }
+
+        #[test]
+        fn children_inherit_the_subject_name() {
+            let failures = assert_that!((1, 2))
+                .with_subject_name("pair")
+                .capture(|it| {
+                    it.derive_owned(|pair| pair.0).is_equal_to(2);
+                    it
+                });
+            assert_that!(failures[0].subject_name.as_deref()).is_equal_to(Some("pair"));
+            assert_that!(&failures[0].projections).contains_exactly(["derive_owned(..)"]);
+        }
+
+        #[test]
+        fn mappings_record_their_projection() {
+            let failures = assert_that!(1).capture(|it| it.map_owned(|it| it + 1).is_equal_to(3));
+            assert_that!(&failures[0].projections).contains_exactly(["map_owned(..)"]);
+        }
+
+        #[test]
+        fn assertions_on_the_expression_value_record_no_projection() {
+            let failures = assert_that!(1).capture(|it| it.is_equal_to(2));
+            assert_that!(&failures[0].projections).is_empty();
+            assert_that!(failures[0].to_string()).does_not_contain("Projection:");
+        }
     }
 
     #[test]

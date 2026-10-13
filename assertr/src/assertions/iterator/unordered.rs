@@ -128,6 +128,7 @@ fn adopt(failure: FailureBuilder, report: AssertionFailure) -> FailureBuilder {
         location: _,
         subject_name: _,
         expression: _,
+        projections: _,
         subject_type_name: _,
         messages: _,
         kind: _,

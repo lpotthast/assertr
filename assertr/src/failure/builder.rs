@@ -45,6 +45,7 @@ impl FailureBuilder {
                 location: None,
                 subject_name: None,
                 expression: None,
+                projections: Vec::new(),
                 subject_type_name: core::any::type_name::<T>(),
                 kind,
                 actual: None,

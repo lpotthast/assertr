@@ -705,7 +705,7 @@ macro_rules! report_impls {
                 R: Clone,
             {
                 if let Some(value) = self.test_assertion(&const { HasCurrentContext::<E>::new() }) {
-                    assertions(self.derive(|_| value));
+                    assertions(self.derive_as("current_context()", |_| value));
                 }
                 self
             }
@@ -720,14 +720,14 @@ macro_rules! report_impls {
                 A: for<'a> FnOnce(AssertThat<'a, C, M, R>),
                 R: Clone,
             {
-                self.satisfies(|report| report.current_context(), assertions)
+                self.satisfies_as("current_context()", |report| report.current_context(), assertions)
             }
 
             fn current_context(&'t self) -> AssertThat<'t, C, M, R>
             where
                 R: Clone,
             {
-                self.derive(|report| report.current_context())
+                self.derive_as("current_context()", |report| report.current_context())
             }
         }
 
@@ -740,7 +740,7 @@ macro_rules! report_impls {
                 R: Clone,
             {
                 let value = self.require(&const { HasCurrentContext::<E>::new() });
-                self.derive(|_| value)
+                self.derive_as("current_context()", |_| value)
             }
         }
     };
@@ -1285,6 +1285,9 @@ mod tests {
                 |it: AssertThat<AssertionFailure, Capture>| {
                     it.has_text_report(formatdoc! {r#"
                         -------- assertr --------
+                        Expression: `report!("root")`
+                        Projection: `.current_context()`
+
                         Expected: "other"
 
                           Actual: "root"

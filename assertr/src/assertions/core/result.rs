@@ -156,7 +156,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
         R: ValueRenderer<E> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.satisfy_success(self.test_assertion(&IsOk), assertions);
+        self.satisfy_success("ok()", self.test_assertion(&IsOk), assertions);
         self
     }
 
@@ -166,7 +166,7 @@ impl<T, E, M: Mode, R> ResultAssertions<T, E, M, R> for AssertThat<'_, Result<T,
         R: ValueRenderer<T> + Clone,
         A: for<'a> FnOnce(AssertThat<'a, E, M, R>),
     {
-        self.satisfy_success(self.test_assertion(&IsErr), assertions);
+        self.satisfy_success("err()", self.test_assertion(&IsErr), assertions);
         self
     }
 }
@@ -200,8 +200,9 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<E>,
     {
-        self.matches(IsOk)
-            .map(|actual| project_checked(actual, Result::ok, |it| it.as_ref().ok()))
+        self.matches(IsOk).map_as("ok()", |actual| {
+            project_checked(actual, Result::ok, |it| it.as_ref().ok())
+        })
     }
 
     #[track_caller]
@@ -209,8 +210,9 @@ impl<'t, T, E, R> ResultExtractAssertions<'t, T, E, R> for AssertThat<'t, Result
     where
         R: ValueRenderer<T>,
     {
-        self.matches(IsErr)
-            .map(|actual| project_checked(actual, Result::err, |it| it.as_ref().err()))
+        self.matches(IsErr).map_as("err()", |actual| {
+            project_checked(actual, Result::err, |it| it.as_ref().err())
+        })
     }
 }
 

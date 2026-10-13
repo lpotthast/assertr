@@ -196,10 +196,18 @@ pub struct AssertionFailure {
     /// The name given to the assertion's subject via `with_subject_name`, if any.
     pub subject_name: Option<String>,
 
-    /// The source expression that produced the assertion subject, if the entry point captured it.
-    /// Derived child chains start a new diagnostic subject and do not inherit their parent's
-    /// expression.
+    /// The source expression that produced the root subject of the assertion chain, if the entry
+    /// point captured it. Derived child chains inherit it and record how they reached their own
+    /// subject in [`projections`](Self::projections).
     pub expression: Option<&'static str>,
+
+    /// The projections that lead from the value of [`expression`](Self::expression) to the
+    /// subject that raised this failure, in order, such as `err()` followed by
+    /// `current_context()`. Empty for an assertion on the expression's value itself.
+    ///
+    /// Built-in extractions record their method, such as `some()` or `first()`. Arbitrary
+    /// mappings record their method with elided arguments, such as `derive(..)`.
+    pub projections: Vec<&'static str>,
 
     /// The Rust type name of the assertion subject that raised this failure.
     ///

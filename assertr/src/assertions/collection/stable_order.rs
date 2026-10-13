@@ -430,7 +430,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
     {
         let element = self.require(&HasFirst);
-        self.derive(|_| element)
+        self.derive_as("first()", |_| element)
     }
 
     #[track_caller]
@@ -439,7 +439,7 @@ where
         R: ValueRenderer<C::Item> + Clone,
     {
         let element = self.require(&HasLast);
-        self.derive(|_| element)
+        self.derive_as("last()", |_| element)
     }
 }
 

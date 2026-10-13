@@ -507,28 +507,30 @@ impl<'t, C: StdCommand, M: Mode, R> CommandProjectionAssertions<'t, M, R>
     where
         R: Clone,
     {
-        self.derive_owned(|command| command.as_std().get_program())
+        self.derive_owned_as("program()", |command| command.as_std().get_program())
     }
 
     fn args(&'t self) -> AssertThat<'t, Vec<&'t OsStr>, M, R>
     where
         R: Clone,
     {
-        self.derive_owned(|command| command.as_std().get_args().collect())
+        self.derive_owned_as("args()", |command| command.as_std().get_args().collect())
     }
 
     fn envs(&'t self) -> AssertThat<'t, BTreeMap<&'t OsStr, Option<&'t OsStr>>, M, R>
     where
         R: Clone,
     {
-        self.derive_owned(|command| command.as_std().get_envs().collect())
+        self.derive_owned_as("envs()", |command| command.as_std().get_envs().collect())
     }
 
     fn current_dir(&'t self) -> AssertThat<'t, Option<&'t Path>, M, R>
     where
         R: Clone,
     {
-        self.derive_owned(|command| command.as_std().get_current_dir())
+        self.derive_owned_as("current_dir()", |command| {
+            command.as_std().get_current_dir()
+        })
     }
 }
 

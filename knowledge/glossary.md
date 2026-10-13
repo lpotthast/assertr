@@ -53,6 +53,7 @@ for detailed requirements and exceptions.
 | [Mapping](assertion-lifecycle.md#projections-and-continuation) | Replace the subject and move the existing state and renderer to the new chain. |
 | [Derivation](assertion-lifecycle.md#projections-and-continuation) | Create a child while retaining the parent. |
 | [Projection](assertion-lifecycle.md#projections-and-continuation) | Select a borrowed part or computed view for a child. |
+| [Projections](assertion-lifecycle.md#projections-and-continuation) | The recorded steps, such as `err()`, leading from a failure's expression to its subject. |
 | [Extraction](assertion-lifecycle.md#continuation-availability) | Check and continue on a selected value. |
 | [Fluent alias](fluent-entry.md#borrowing-and-ownership) | Generated spelling preserving method behavior and bounds. |
 | [Expression capture](fluent-entry.md#scoped-expression-capture) | Record the asserted expression's source text through macros or fluent rewriting. |

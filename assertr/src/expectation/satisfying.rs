@@ -154,7 +154,8 @@ mod tests {
 
                   Actual: 1
 
-              - Expected: 3
+              - Projection: `.derive_owned(..)`
+                Expected: 3
 
                   Actual: 2
             -------- assertr --------

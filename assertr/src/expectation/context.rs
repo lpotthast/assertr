@@ -431,7 +431,7 @@ impl<'r, R> AssertionContext<'r, R> {
             .with_rendering_budget(self.rendering.budget())
             .with_location(self.include_location)
             .collect_failures(|sink| {
-                assertions(sink.derive(|value| value));
+                assertions(sink.reborrow());
                 sink
             });
         let matched = failures.is_empty();

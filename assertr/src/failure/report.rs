@@ -120,6 +120,13 @@ fn write_report(failure: &AssertionFailure, w: &mut dyn Write) -> fmt::Result {
         write_expression(w, expression)?;
         w.write_str("`\n")?;
     }
+    if !failure.projections.is_empty() {
+        w.write_str("Projection: `")?;
+        for projection in &failure.projections {
+            write!(w, ".{projection}")?;
+        }
+        w.write_str("`\n")?;
+    }
 
     let description = body(
         failure.actual.as_ref(),

@@ -629,13 +629,17 @@ struct ChainState<'t, M: Mode, R> {
 /// A chain detached across an await keeps these settings without its records, so this type holds
 /// no cells and no borrows. It is `Send` and `Sync`.
 struct DiagnosticSettings {
-    /// Optional user-provided subject name shown in failure diagnostics. Derived chains start
-    /// without a name because they describe a new subject.
+    /// Optional user-provided subject name shown in failure diagnostics. Derived chains inherit
+    /// it, because their projections describe their subject relative to it.
     subject_name: Option<String>,
 
     /// Source expression shown in failure diagnostics, usually recorded by an entry macro or
-    /// fluent-expression rewriting. Derived chains start without an expression.
+    /// fluent-expression rewriting. Derived chains inherit it.
     expression: Expression,
+
+    /// The projections, such as `err()` or `derive(..)`, that lead from the value of `expression`
+    /// to this chain's subject, in order. Mappings and derived chains append to them.
+    projections: Vec<&'static str>,
 
     /// Whether failures record the assertion caller's file, line, and column. Derived chains
     /// inherit this setting. Tests can disable it when comparing exact failure reports.

@@ -203,7 +203,7 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
     #[track_caller]
     fn panics(self) -> AssertThat<'t, PanicValue, Panic, R> {
         self.track_assertion();
-        self.map(|function| {
+        self.map_actual(|function| {
             let invocation = std::panic::catch_unwind(AssertUnwindSafe(owned_fn(function)));
             Actual::Owned(drop_output(invocation))
         })
@@ -213,7 +213,7 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
             },
             Location::caller(),
         )
-        .map(panic_value)
+        .map_as("panics()", panic_value)
     }
 
     #[track_caller]
@@ -223,14 +223,15 @@ impl<'t, O, R, F: FnOnce() -> O> FnOnceAssertions<'t, O, R> for AssertThat<'t, F
     {
         self.track_assertion();
         // The output remains available for later assertions, so dropping it is outside this
-        // unwind boundary.
-        self.map(|function| {
+        // unwind boundary. Its projection is recorded once the check passed, so the check's own
+        // failure still describes the function.
+        self.map_actual(|function| {
             Actual::Owned(std::panic::catch_unwind(AssertUnwindSafe(owned_fn(
                 function,
             ))))
         })
         .apply_assertion_after_tracking(DidNotPanic, Location::caller())
-        .map(output)
+        .map_as("does_not_panic()", output)
     }
 }
 
@@ -267,7 +268,7 @@ where
         let location = Location::caller();
         async move {
             self.track_assertion();
-            self.map_async(|function| {
+            self.map_async_actual(|function| {
                 let function = owned_fn(function);
                 async move { drop_output(invoke_async(function).await) }
             })
@@ -278,7 +279,7 @@ where
                 },
                 location,
             )
-            .map(panic_value)
+            .map_as("panics_async()", panic_value)
         }
     }
 
@@ -291,10 +292,10 @@ where
         let location = Location::caller();
         async move {
             self.track_assertion();
-            self.map_async(|function| invoke_async(owned_fn(function)))
+            self.map_async_actual(|function| invoke_async(owned_fn(function)))
                 .await
                 .apply_assertion_after_tracking(DidNotPanic, location)
-                .map(output)
+                .map_as("does_not_panic_async()", output)
         }
     }
 }
@@ -396,6 +397,7 @@ mod tests {
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `|| panic!("boom")`
+                    Projection: `.panics()`
 
                     Actual: &str
 
@@ -548,6 +550,7 @@ mod tests {
                 .is_equal_to(formatdoc! {r#"
                     -------- assertr --------
                     Expression: `|| "actual"`
+                    Projection: `.does_not_panic()`
 
                     Expected: "expected"
 

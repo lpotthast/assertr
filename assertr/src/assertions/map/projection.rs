@@ -154,14 +154,14 @@ impl<'t, Mp: Map, M: Mode, R> MapProjectionAssertions<'t, Mp, M, R> for AssertTh
     where
         R: Clone,
     {
-        self.derive_owned(MapKeys)
+        self.derive_owned_as("keys()", MapKeys)
     }
 
     fn values(&'t self) -> AssertThat<'t, MapValues<'t, Mp>, M, R>
     where
         R: Clone,
     {
-        self.derive_owned(MapValues)
+        self.derive_owned_as("values()", MapValues)
     }
 }
 
@@ -284,6 +284,9 @@ mod tests {
             .message()
             .is_equal_to(formatdoc! {r#"
                 -------- assertr --------
+                Expression: `map`
+                Projection: `.keys()`
+
                 Actual: {{
                     "a",
                     "b",

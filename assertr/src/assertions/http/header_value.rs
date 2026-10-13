@@ -169,7 +169,7 @@ impl<M: Mode, R> HttpHeaderValueAssertions<M, R>
         R: ValueRenderer<http::header::HeaderValue> + Clone,
     {
         if let Some(value) = self.test_assertion(&IsAscii) {
-            assertions(self.derive_owned(|_| value));
+            assertions(self.derive_owned_as("ascii()", |_| value));
         }
         self
     }
@@ -199,7 +199,7 @@ impl<'t, R> HttpHeaderValueExtractAssertions<'t, R>
         R: ValueRenderer<http::header::HeaderValue>,
     {
         let value = self.require(&IsAscii).to_owned();
-        self.map(|_| value.into())
+        self.map_as("ascii()", |_| value.into())
     }
 }
 

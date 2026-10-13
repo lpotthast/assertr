@@ -37,6 +37,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Failures of derived chains and extractions keep the subject name and the expression of their root chain, and report
+  how they reached their subject on a new `Projection:` line, such as ``Projection: `.err().current_context()` ``.
+  `AssertionFailure::projections` holds these steps. Arbitrary mappings record their method with elided arguments, such
+  as `derive(..)`.
 - A `partial!` subject of another variant is reported as "is not the expected variant" with the expected constructor,
   instead of an unsatisfied structure constraint at the variant's path.
 - **Breaking:** `each(..)` requires a `StableOrder` collection and locates every failing element at its position, such

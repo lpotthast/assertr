@@ -116,7 +116,7 @@ mod tests {
 
     #[crate::fluent_expressions]
     #[test]
-    fn fluent_attribute_attaches_only_pending_root_expressions() {
+    fn fluent_attribute_attaches_pending_expressions_unless_overridden() {
         struct NoRenderer;
 
         fn check(root: AssertThat<'_, i32, Capture>) -> AssertThat<'_, i64, Capture, NoRenderer> {
@@ -144,7 +144,7 @@ mod tests {
             let expressions: Vec<_> = failures.iter().map(|failure| failure.expression).collect();
             assert_that!(expressions).contains_exactly([
                 Some("actual"),
-                None,
+                Some("actual"),
                 Some("child override"),
                 Some("actual"),
                 Some("root override"),

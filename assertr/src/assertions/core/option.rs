@@ -136,7 +136,7 @@ impl<T, M: Mode, R> OptionAssertions<T, M, R> for AssertThat<'_, Option<T>, M, R
         R: Clone,
         A: for<'a> FnOnce(AssertThat<'a, T, M, R>),
     {
-        self.satisfy_success(self.test_assertion(&IsSome), assertions);
+        self.satisfy_success("some()", self.test_assertion(&IsSome), assertions);
         self
     }
 }
@@ -157,8 +157,9 @@ pub trait OptionExtractAssertions<'t, T, R = DebugRenderer> {
 impl<'t, T, R> OptionExtractAssertions<'t, T, R> for AssertThat<'t, Option<T>, Panic, R> {
     #[track_caller]
     fn some(self) -> AssertThat<'t, T, Panic, R> {
-        self.matches(IsSome)
-            .map(|actual| project_checked(actual, |it| it, Option::as_ref))
+        self.matches(IsSome).map_as("some()", |actual| {
+            project_checked(actual, |it| it, Option::as_ref)
+        })
     }
 }
 

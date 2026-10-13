@@ -634,7 +634,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
     {
         let definition = HasHeader::new(name);
         let value = self.require(&definition).clone();
-        self.map(|_| value.into())
+        self.map_as("header(..)", |_| value.into())
     }
 
     #[track_caller]
@@ -648,7 +648,9 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
         );
         async move {
             let body = read.await;
-            body.chain.attach(Actual::Owned(body.text))
+            body.chain
+                .attach(Actual::Owned(body.text))
+                .projected("text()")
         }
     }
 
@@ -671,7 +673,7 @@ impl<'t, R> ReqwestResponseExtractAssertions<'t, R>
                 location,
             } = read.await;
             match serde_json::from_str::<T>(&text) {
-                Ok(value) => chain.attach(Actual::Owned(value)),
+                Ok(value) => chain.attach(Actual::Owned(value)).projected("json()"),
                 Err(error) => {
                     let render = chain.render();
                     let failure = FailureBuilder::new::<String>(FailureKind::Other)
@@ -1667,6 +1669,9 @@ mod tests {
             .message()
             .is_equal_to(indoc::formatdoc! {r#"
                 -------- assertr --------
+                Expression: `ok_response()`
+                Projection: `.header(..).ascii()`
+
                 Expected: "nope"
 
                   Actual: "text/plain"

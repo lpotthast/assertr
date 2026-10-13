@@ -144,11 +144,13 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     {
         let location = Location::caller();
         let name = name.into();
-        let read = self.attribute(name.clone());
+        let read = self.read_attribute(None, name.clone());
         async move {
             read.await
                 .apply_assertion_after_tracking(AttributePresent(name), location)
-                .map(|actual| project_checked(actual, |it| it, Option::as_ref))
+                .map_as("attribute(..)", |actual| {
+                    project_checked(actual, |it| it, Option::as_ref)
+                })
         }
     }
 
@@ -160,11 +162,7 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        let name = name.into();
-        let operation = self.named_operation("attribute", &name);
-        observe(self, operation, |element| async move {
-            element.attr(name).await
-        })
+        self.read_attribute(Some("attribute(..)"), name.into())
     }
 
     #[track_caller]
@@ -177,9 +175,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     {
         let name = name.into();
         let operation = self.named_operation("property", &name);
-        observe(self, operation, |element| async move {
-            element.prop(name).await
-        })
+        observe(
+            self,
+            Some("property(..)"),
+            operation,
+            |element| async move { element.prop(name).await },
+        )
     }
 
     #[track_caller]
@@ -187,7 +188,9 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "text", |element| async move { element.text().await })
+        observe(self, Some("text()"), "text", |element| async move {
+            element.text().await
+        })
     }
 
     #[track_caller]
@@ -195,9 +198,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "text content", |element| async move {
-            element.prop("textContent").await
-        })
+        observe(
+            self,
+            Some("text_content()"),
+            "text content",
+            |element| async move { element.prop("textContent").await },
+        )
     }
 
     #[track_caller]
@@ -205,9 +211,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "inner text", |element| async move {
-            read::inner_text(&element).await
-        })
+        observe(
+            self,
+            Some("inner_text()"),
+            "inner text",
+            |element| async move { read::inner_text(&element).await },
+        )
     }
 
     #[track_caller]
@@ -215,9 +224,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "displayed", |element| async move {
-            element.is_displayed().await
-        })
+        observe(
+            self,
+            Some("displayed()"),
+            "displayed",
+            |element| async move { element.is_displayed().await },
+        )
     }
 
     #[track_caller]
@@ -225,7 +237,7 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "enabled", |element| async move {
+        observe(self, Some("enabled()"), "enabled", |element| async move {
             element.is_enabled().await
         })
     }
@@ -235,7 +247,7 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "selected", |element| async move {
+        observe(self, Some("selected()"), "selected", |element| async move {
             element.is_selected().await
         })
     }
@@ -245,7 +257,7 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "focused", |element| async move {
+        observe(self, Some("focused()"), "focused", |element| async move {
             read::focused(&element).await
         })
     }
@@ -255,9 +267,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "accessible name", |element| async move {
-            read::accessible_name(&element).await
-        })
+        observe(
+            self,
+            Some("accessible_name()"),
+            "accessible name",
+            |element| async move { read::accessible_name(&element).await },
+        )
     }
 
     #[track_caller]
@@ -265,9 +280,12 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "accessible role", |element| async move {
-            read::accessible_role(&element).await
-        })
+        observe(
+            self,
+            Some("accessible_role()"),
+            "accessible role",
+            |element| async move { read::accessible_role(&element).await },
+        )
     }
 
     #[cfg(feature = "thirtyfour-cdp")]
@@ -276,16 +294,35 @@ impl<'t, R> ThirtyfourWebElementAssertions<'t, R> for AssertThat<'t, WebElement,
     where
         R: ValueRenderer<str> + ValueRenderer<WebDriverError>,
     {
-        observe(self, "accessible description", |element| async move {
-            read::accessible_description(&element).await
-        })
+        observe(
+            self,
+            Some("accessible_description()"),
+            "accessible description",
+            |element| async move { read::accessible_description(&element).await },
+        )
     }
 }
 
-impl<R: ValueRenderer<str>> AssertThat<'_, WebElement, Panic, R> {
+impl<'t, R: ValueRenderer<str>> AssertThat<'t, WebElement, Panic, R> {
     /// Describes a read of the attribute or property `name`, rendering the name.
     fn named_operation(&self, kind: &str, name: &str) -> String {
         format!("{kind} {}", self.render().value(name))
+    }
+
+    /// Reads the attribute `name`, recording `step` as the continuation's projection.
+    #[track_caller]
+    fn read_attribute(
+        self,
+        step: Option<&'static str>,
+        name: String,
+    ) -> impl Future<Output = AssertThat<'t, Option<String>, Panic, R>>
+    where
+        R: ValueRenderer<WebDriverError>,
+    {
+        let operation = self.named_operation("attribute", &name);
+        observe(self, step, operation, |element| async move {
+            element.attr(name).await
+        })
     }
 }
 
@@ -324,11 +361,13 @@ impl<R: ValueRenderer<str>> Expectation<Option<String>, R> for AttributePresent 
 }
 
 /// Tracks the read as one assertion at the caller and detaches the chain before the browser
-/// await, keeping only its transferable diagnostic settings. The continuation names the
+/// await, keeping only its transferable diagnostic settings. The continuation records `step`, if
+/// any, as its projection. The continuation names the
 /// operation and the element in a message, and a browser error fails with both as facts.
 #[track_caller]
 fn observe<'t, T: 't, R, Fut>(
     chain: AssertThat<'t, WebElement, Panic, R>,
+    step: Option<&'static str>,
     operation: impl Into<String>,
     read: impl FnOnce(WebElement) -> Fut,
 ) -> impl Future<Output = AssertThat<'t, T, Panic, R>>
@@ -345,9 +384,14 @@ where
     let element = actual.into_owned();
     async move {
         match read(element).await {
-            Ok(value) => detached
-                .attach(Actual::Owned(value))
-                .with_detail_message(format!("Observed {operation} of element {element_id}")),
+            Ok(value) => {
+                let chain = detached.attach(Actual::Owned(value));
+                let chain = match step {
+                    Some(step) => chain.projected(step),
+                    None => chain,
+                };
+                chain.with_detail_message(format!("Observed {operation} of element {element_id}"))
+            }
             Err(error) => {
                 let failure = not_observed::<WebElement>()
                     .fact(Fact::labelled("Operation", operation))

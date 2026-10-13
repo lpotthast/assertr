@@ -69,10 +69,14 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 
 | Operation                                       | State and metadata                                                                                                          | Renderer                 |
 |-------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------|--------------------------|
-| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression.                                                                   | Moved, no `Clone` bound. |
-| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages. Clear name and expression.                                 | Cloned.                  |
+| `map`, `map_owned`, `map_async`                 | Move existing state, including records, name, expression. Record the projection. | Moved, no `Clone` bound. |
+| `derive`, `derive_owned`, `derive_async`        | Create a child with inherited settings, mode, ancestor messages, name, and expression. Record the projection. | Cloned.                  |
 | `satisfies`, `satisfies_owned`, `satisfies_ref` | Check a derived child in a callback, then return the original chain. Locate its failures at the outermost `satisfies` call. | Cloned for child.        |
 
+- Each mapping, derivation, and extraction appends a projection, such as `err()` or `derive(..)`, so failures show how
+  their subject was reached from the expression: a `Projection:` line, such as `.err().current_context()`, follows the
+  `Expression:` line. Built-in extractions record their own method name. An execution adapter records its projection
+  only after its own check passed, so that check's failure still describes the original subject.
 - `map` transforms `Actual<T>` into `Actual<U>`. `map_owned` moves an owned subject into its mapper and clones only a
   borrowed one.
   `map_async` awaits a new owned subject.

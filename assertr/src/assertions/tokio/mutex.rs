@@ -253,7 +253,7 @@ impl<T, M: Mode, R> TokioMutexAssertions<T, M, R> for AssertThat<'_, Mutex<T>, M
         {
             // The guard is held while the callback runs and released before the chain continues.
             let guard = self.test_assertion(&IsNotLocked);
-            self.satisfy_success(guard.as_deref(), assertions);
+            self.satisfy_success("lock()", guard.as_deref(), assertions);
         }
         self
     }
@@ -512,6 +512,9 @@ mod tests {
             .message()
             .is_equal_to(formatdoc! {r"
                     -------- assertr --------
+                    Expression: `mutex`
+                    Projection: `.lock()`
+
                     Expected: 43
 
                       Actual: 42

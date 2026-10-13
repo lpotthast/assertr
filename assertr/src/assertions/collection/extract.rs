@@ -90,7 +90,7 @@ where
         R: ValueRenderer<C::Item> + Clone + ValueRenderer<usize>,
     {
         let element = self.require(&HasSingle);
-        self.derive(|_| element)
+        self.derive_as("single()", |_| element)
     }
 }
 
