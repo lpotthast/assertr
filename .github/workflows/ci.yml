@@ -71,6 +71,7 @@ jobs:
           - thirtyfour,fluent
           - thirtyfour-cdp,fluent
           - tokio
+          - tokio-process
     steps:
       - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable

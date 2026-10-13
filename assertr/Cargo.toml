@@ -39,6 +39,7 @@ full = [
     "thirtyfour",
     "thirtyfour-cdp",
     "tokio",
+    "tokio-process",
 ]
 std = ["borrow-for/std", "num-traits?/std", "serde_json?/std", "toml?/std"]
 partial = ["dep:assertr-macros"]
@@ -49,6 +50,8 @@ num = ["dep:num-traits"]
 http = ["std", "dep:http"]
 jiff = ["std", "dep:jiff"]
 tokio = ["std", "dep:tokio"]
+# Kept apart from `tokio`, whose watch and lock assertions do not need tokio's process driver.
+tokio-process = ["tokio", "tokio/process"]
 thirtyfour = ["std", "dep:thirtyfour", "dep:http"]
 thirtyfour-cdp = ["thirtyfour", "thirtyfour/cdp", "dep:serde", "serde?/derive"]
 program = ["std", "dep:which"]

@@ -42,6 +42,7 @@
 //! | [`Map`] and [`MapLookup`] | Map assertions such as `contains_key` |
 //! | [`StableEntryOrder`] | Positional assertions on the `keys` and `values` views of a map |
 //! | [`NumericDistance`] | Tolerance checks with `is_close_to` |
+//! | `StdCommand` (`std`) | Command assertions such as `has_arg` |
 //!
 //! # Assertion traits
 //!
@@ -148,7 +149,7 @@ pub use self::core::{
 };
 #[cfg(feature = "std")]
 pub use self::std::{
-    command::CommandAssertions,
+    command::{CommandAssertions, CommandProjectionAssertions, StdCommand},
     eventually::{EventualAssertions, Patience},
     mutex::MutexAssertions,
     path::PathAssertions,

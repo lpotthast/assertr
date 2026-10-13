@@ -305,6 +305,18 @@ impl<'r, R> RenderingContext<'r, R> {
         ))
     }
 
+    /// Renders already rendered items as a synthetic list in the given order, within the item
+    /// budget. `length` counts every item, including those `items` does not yield.
+    #[cfg(feature = "std")]
+    pub(crate) fn structured_list(
+        self,
+        items: impl Iterator<Item = Rendered>,
+        length: usize,
+        order: RenderingOrder,
+    ) -> Rendered {
+        Rendered::untyped(self.selected_group(GroupStyle::List, items, length, order))
+    }
+
     /// Renders key/value entries as a synthetic list of tuples in the given order.
     ///
     /// Keys and values are rendered through their respective `Borrow` views and retain their type

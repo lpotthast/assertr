@@ -387,11 +387,11 @@ pub mod numeric {
     };
 }
 
-/// Command argument expectations. Requires `std`.
+/// Command program, argument, and environment expectations. Requires `std`.
 #[cfg(feature = "std")]
 pub mod command {
     #[doc(inline)]
-    pub use crate::assertions::std::command::HasArg;
+    pub use crate::assertions::std::command::{DoesNotHaveArg, HasArg, HasEnv, HasProgram};
 }
 
 /// Drop-requirement expectations.

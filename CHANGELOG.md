@@ -22,6 +22,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `starts_with`, `does_not_start_with`, `ends_with`, `does_not_end_with`, and `equal_to_ignoring_ascii_case`, so a
   `partial!` field can check a string without a `satisfying` closure, whose `contains` is ambiguous between strings and
   collections.
+- Command assertions `has_program`, `does_not_have_arg`, and `has_env`, and the projections `program()`, `args()`,
+  `envs()`, and `current_dir()`, which continue with the general assertion families. They apply to every `StdCommand`:
+  `std::process::Command`, `tokio::process::Command` with the new `tokio-process` feature, and custom command builders
+  that expose their standard command.
 
 ### Changed
 
