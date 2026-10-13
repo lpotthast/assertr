@@ -3,7 +3,7 @@ use crate::{
     assertions::{
         collection::Placement,
         iterator::{
-            ContainsAllScan, ContainsMatchingScan, ContainsScan, CountScan,
+            ContainsAllScan, ContainsMatchingScan, ContainsScan, CountMatchingScan, CountScan,
             DoesNotContainMatchingScan, DoesNotContainScan, ElementsEqualScan, ElementsMatchScan,
             IsExhaustedScan, IsNotExhaustedScan, Scan, UnorderedEqualScan, UnorderedMatchScan, run,
         },
@@ -264,6 +264,22 @@ pub trait IteratorAssertions<'t, T, M: Mode, R = DebugRenderer> {
     /// ```
     fn has_count(self, expected: usize) -> AssertThat<'t, (), M, R>
     where
+        R: ValueRenderer<T> + ValueRenderer<usize>;
+
+    /// Asserts that exactly `count` iterator elements match `matcher`.
+    ///
+    /// Consumes the iterator until it ends, or until more than `count` elements matched, so an
+    /// infinite iterator with too many matches fails. A failure reports the matching elements at
+    /// their yield positions.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    ///
+    /// assert_that_owned!([1, 5, 7].into_iter()).has_count_matching(2, gt(4));
+    /// ```
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> AssertThat<'t, (), M, R>
+    where
+        P: Expectation<T, R>,
         R: ValueRenderer<T> + ValueRenderer<usize>;
 }
 
@@ -550,6 +566,15 @@ where
     {
         consume(self, || CountScan::<T>::new(expected))
     }
+
+    #[track_caller]
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> AssertThat<'t, (), M, R>
+    where
+        P: Expectation<T, R>,
+        R: ValueRenderer<T> + ValueRenderer<usize>,
+    {
+        consume(self, || CountMatchingScan::<T, _>::new(count, matcher))
+    }
 }
 
 /// Takes the iterator out of `this`, then tracks the assertion and lets `scan` create the scan.
@@ -613,6 +638,7 @@ mod tests {
             core::iter::empty::<i32>().must_owned().be_exhausted();
             values().not_be_exhausted();
             values().have_count(3);
+            values().have_count_matching(1, eq(2));
         }
     }
 
@@ -1828,6 +1854,69 @@ mod tests {
                     Actual: []
 
                     is unexpectedly exhausted
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count_matching {
+        use indoc::formatdoc;
+
+        use crate::{matchers::gt, prelude::*};
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that_owned!([1, 2, 3].into_iter()),
+                has_count_matching(2, gt(2))
+            );
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that_owned!([1, 5, 7].into_iter()).has_count_matching(2, gt(4));
+            assert_that_owned!(core::iter::empty::<i32>()).has_count_matching(0, gt(4));
+        }
+
+        #[test]
+        fn stops_on_an_infinite_iterator_after_one_extra_match() {
+            let mut iterator = 0..;
+            let failures =
+                assert_that_owned!(&mut iterator).capture(|it| it.has_count_matching(1, gt(1)));
+            assert_that!(failures).has_length(1);
+            assert_that!(failures[0].to_string()).contains("Minimum actual count: 2");
+            assert_that!(iterator.next()).is_equal_to(Some(4));
+        }
+
+        #[test]
+        fn panics_with_the_matching_elements_at_their_positions() {
+            assert_that!(|| {
+                assert_that_owned!([1, 5, 2].into_iter())
+                    .with_location(false)
+                    .has_count_matching(2, gt(4));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 5, 2].into_iter()`
+
+                    does not have the expected number of matching elements
+
+                    Constraint:
+                        is greater than
+
+                        Expected: 4
+
+                    Details:
+                      - Expected count: 2
+                      - Actual count: 1
+                      - Consumed elements: 3
+                    Nested failures:
+                      - At [1]:
+                        Actual: 5
+
+                        matches the constraint
                     -------- assertr --------
                 "});
         }

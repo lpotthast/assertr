@@ -329,7 +329,7 @@ pub mod collection {
         ContainsExactlyInAnyOrder, ContainsExactlySameInstances,
         ContainsExactlySameInstancesInAnyOrder, ContainsSameInstanceAs, DoesNotContain,
         DoesNotContainAnyOf, DoesNotContainSameInstanceAs, EndsWith, ExactElementsRejection,
-        ExactIdentityRejection, HasElementAt, HasFirst, HasLast, HasSingle,
+        ExactIdentityRejection, HasCountMatching, HasElementAt, HasFirst, HasLast, HasSingle,
         IdentityMembershipRejection, MissingElementsRejection, PositionalRejection, StartsWith,
         UnorderedIdentityRejection,
     };

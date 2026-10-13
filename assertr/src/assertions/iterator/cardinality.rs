@@ -2,7 +2,11 @@ use super::{
     AssertionContext, Borrow, FailureBuilder, FailureKind, KnownLength, LengthBound,
     PREVIEW_CAPACITY, PhantomData, RenderingOrder, Scan, Tail, ValueRenderer, consumed_fact,
 };
-use crate::failure::Fact;
+use crate::{
+    assertions::collection::matching::{explain_match_count, record_match},
+    expectation::{Evidence, Expectation},
+    failure::{Fact, PathSegment},
+};
 
 /// Requires an iterator to be exhausted, yielding no element. Consumes at most one.
 pub(crate) struct IsExhaustedScan<T>(PhantomData<fn() -> T>);
@@ -182,6 +186,109 @@ where
                 tail.omission(failure)
             }
         }
+    }
+}
+
+/// Counts the elements matching a matcher, stopping once more than the expected count matched, so
+/// an infinite iterator with too many matches fails. Matching elements are recorded at their
+/// yield positions.
+pub(crate) struct CountMatchingScan<T, P> {
+    expected: usize,
+    matcher: P,
+    item: PhantomData<fn() -> T>,
+}
+
+impl<T, P> CountMatchingScan<T, P> {
+    pub(crate) const fn new(expected: usize, matcher: P) -> Self {
+        Self {
+            expected,
+            matcher,
+            item: PhantomData,
+        }
+    }
+}
+
+/// Why a match count scan rejected its input.
+pub(crate) struct CountMatchingRejection {
+    count: usize,
+    exact: bool,
+    consumed: usize,
+    evidence: Evidence,
+}
+
+impl<T, P, I, R> Scan<I, R> for CountMatchingScan<T, P>
+where
+    I: Iterator,
+    I::Item: Borrow<T>,
+    P: Expectation<T, R>,
+    R: ValueRenderer<T> + ValueRenderer<usize>,
+{
+    type Rejection = CountMatchingRejection;
+
+    fn kind(&self) -> FailureKind {
+        FailureKind::Matching
+    }
+
+    fn observe(
+        &self,
+        iterator: &mut I,
+        context: &AssertionContext<'_, R>,
+    ) -> Result<(), Self::Rejection> {
+        let mut matches = context.isolated();
+        let (mut count, mut consumed) = (0, 0);
+        let mut exact = true;
+        for item in iterator {
+            consumed += 1;
+            if matches.probe(item.borrow(), &self.matcher) {
+                count += 1;
+                record_match(
+                    &mut matches,
+                    item.borrow(),
+                    Some(PathSegment::Index(consumed - 1)),
+                );
+                if count > self.expected {
+                    exact = false;
+                    break;
+                }
+            }
+        }
+        if exact && count == self.expected {
+            Ok(())
+        } else {
+            Err(CountMatchingRejection {
+                count,
+                exact,
+                consumed,
+                evidence: matches.into_evidence(),
+            })
+        }
+    }
+
+    fn explain(
+        &self,
+        rejection: Self::Rejection,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let CountMatchingRejection {
+            count,
+            exact,
+            consumed,
+            evidence,
+        } = rejection;
+        let label = if exact {
+            "Actual count"
+        } else {
+            "Minimum actual count"
+        };
+        let failure = explain_match_count::<T, _, _>(
+            self.expected,
+            &self.matcher,
+            Some((label, count, evidence)),
+            failure,
+            context,
+        );
+        consumed_fact(failure, context.render(), consumed)
     }
 }
 

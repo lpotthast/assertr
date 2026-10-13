@@ -150,6 +150,21 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
         E: BorrowFor<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
+    /// Asserts that exactly `count` elements match `matcher`.
+    ///
+    /// Each element is probed once. A failure reports the actual count and the matching
+    /// elements, so it needs a renderer for the elements as well as for the counts.
+    ///
+    /// ```
+    /// use assertr::{matchers::gt, prelude::*};
+    ///
+    /// assert_that!([1, 5, 7]).has_count_matching(2, gt(4));
+    /// ```
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> Self
+    where
+        P: Expectation<T, R>,
+        R: ValueRenderer<T> + ValueRenderer<usize>;
+
     /// Asserts that no element equals `not_expected`.
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
@@ -310,6 +325,15 @@ where
     }
 
     #[track_caller]
+    fn has_count_matching<P>(self, count: usize, matcher: P) -> Self
+    where
+        P: Expectation<C::Item, R>,
+        R: ValueRenderer<C::Item> + ValueRenderer<usize>,
+    {
+        self.matches(super::matching::HasCountMatching::new(count, matcher))
+    }
+
+    #[track_caller]
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
@@ -388,6 +412,7 @@ mod tests {
             values.must().contain_all([1, 3]);
             values.must().contain_any_of([3, 4]);
             values.must().not_contain_any_of([4, 5]);
+            values.must().have_count_matching(1, eq(2));
             values.must().not_contain(4);
             values.must().not_contain_matching(eq(4));
             values.must().not_contain_satisfying(is(4));
@@ -777,6 +802,88 @@ mod tests {
                             3,
                             1,
                         ]
+                    -------- assertr --------
+                "});
+        }
+    }
+
+    mod has_count_matching {
+        use indoc::formatdoc;
+
+        use crate::{
+            matchers::{gt, predicate},
+            prelude::*,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!([1, 2].as_slice()),
+                has_count_matching(2, gt(1))
+            );
+        }
+
+        #[test]
+        fn succeeds_when_the_count_matches() {
+            assert_that!([1, 5, 7].as_slice())
+                .has_count_matching(2, gt(4))
+                .has_count_matching(0, gt(9))
+                .has_count_matching(3, gt(0));
+        }
+
+        #[test]
+        fn probes_each_element_once() {
+            let calls = core::cell::Cell::new(0);
+            let failures = assert_that!([1, 2, 3].as_slice()).capture(|it| {
+                it.has_count_matching(
+                    1,
+                    predicate(|_: &i32| {
+                        calls.set(calls.get() + 1);
+                        true
+                    }),
+                )
+            });
+            assert_that!(failures).has_length(1);
+            assert_that!(calls.get()).is_equal_to(3);
+        }
+
+        #[test]
+        fn panics_with_the_counts_and_the_matching_elements() {
+            assert_that!(|| {
+                assert_that!([1, 5, 7].as_slice())
+                    .with_location(false)
+                    .has_count_matching(1, gt(4));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                    -------- assertr --------
+                    Expression: `[1, 5, 7].as_slice()`
+
+                    Actual: [
+                        1,
+                        5,
+                        7,
+                    ]
+
+                    does not have the expected number of matching elements
+
+                    Constraint:
+                        is greater than
+
+                        Expected: 4
+
+                    Details:
+                      - Expected count: 1
+                      - Actual count: 2
+                    Nested failures:
+                      - Actual: 5
+
+                        matches the constraint
+
+                      - Actual: 7
+
+                        matches the constraint
                     -------- assertr --------
                 "});
         }

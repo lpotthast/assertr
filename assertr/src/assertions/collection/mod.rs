@@ -34,7 +34,8 @@ pub use identity::{
     UnorderedIdentityRejection,
 };
 pub use matching::{
-    ContainsMatching, DoesNotContainMatching, contains_matching, does_not_contain_matching,
+    ContainsMatching, DoesNotContainMatching, HasCountMatching, contains_matching,
+    does_not_contain_matching,
 };
 pub use random_access::{HasElementAt, RandomAccessExtractAssertions};
 pub use stable_order::{HasFirst, HasLast, StableOrderAssertions, StableOrderExtractAssertions};

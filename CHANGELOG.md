@@ -30,6 +30,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   occurrences like `str::matches`. `matchers::string::contains_occurrences(..)` is the matcher form.
 - `contains_any_of(..)` and `does_not_contain_any_of(..)` check collections of any kind against a list of values. The
   negative form reports every unexpected value it found.
+- `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
+  failure reports the matching elements.
 
 ### Changed
 
