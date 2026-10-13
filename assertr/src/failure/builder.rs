@@ -102,6 +102,11 @@ impl FailureBuilder {
         self
     }
 
+    /// Whether an actual value was set.
+    pub(crate) const fn has_actual(&self) -> bool {
+        self.failure.actual.is_some()
+    }
+
     /// Sets the sentence between the actual and the expected value, such as `does not contain`.
     ///
     /// A failure without a relation is a direct comparison and renders as an aligned `Expected:` /

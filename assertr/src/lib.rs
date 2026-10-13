@@ -409,6 +409,10 @@ use renderer::{DebugRenderer, RenderingBudget};
 /// [`each`](crate::matchers::each), [`each_in_any_order`](crate::matchers::each_in_any_order), and
 /// [`entries_are!`].
 ///
+/// A subject of another variant is reported with the expected constructor. The macro needs no
+/// renderer for the whole subject, so wrap the matcher in
+/// [`matchers::showing_actual`](crate::matchers::showing_actual) to show the actual value as well.
+///
 /// Prefix a constructor with `variant` to include its variant in diagnostic paths. Qualified
 /// paths, including `variant crate::Message::Ready` and `variant ::core::option::Option::None`,
 /// are supported. Use `r#variant::Type` for an unmarked path through a module named `variant`.

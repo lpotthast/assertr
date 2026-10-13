@@ -51,6 +51,7 @@ pub(crate) mod field;
 pub(crate) mod lists;
 pub(crate) mod predicate;
 pub(crate) mod satisfying;
+pub(crate) mod showing_actual;
 
 use alloc::{boxed::Box, vec::Vec};
 

@@ -30,11 +30,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   occurrences like `str::matches`. `matchers::string::contains_occurrences(..)` is the matcher form.
 - `contains_any_of(..)` and `does_not_contain_any_of(..)` check collections of any kind against a list of values. The
   negative form reports every unexpected value it found.
+- `matchers::showing_actual(..)` adds the rendered subject to the rejection of any matcher. It shows the actual value of
+  a `partial!` variant mismatch or of a failing `each(..)`, which render only the parts they check.
 - `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
   failure reports the matching elements.
 
 ### Changed
 
+- A `partial!` subject of another variant is reported as "is not the expected variant" with the expected constructor,
+  instead of an unsatisfied structure constraint at the variant's path.
 - **Breaking:** `each(..)` requires a `StableOrder` collection and locates every failing element at its position, such
   as `At [2]:`. The new `each_in_any_order(..)` keeps the previous order-free behavior for any collection, such as a
   `HashSet`.

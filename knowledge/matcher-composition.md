@@ -161,7 +161,10 @@ borrows through the statement. Selected fields, matcher-list elements, and `entr
 Equality requires `eq`, even for expressions that also implement equality.
 [Operand selection](comparison-operands.md#borrowed-views) determines how reference-valued fields and items are compared.
 
-Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including missing-subject descriptions. Constructor
+Projections attach `Field`, `TupleIndex`, and optional `Variant` paths, including missing-subject descriptions. A subject of
+another variant skips the fields and is rejected as "is not the expected variant", naming the expected constructor
+without a variant path. The pattern needs no renderer for the whole subject, so this evidence does not show the actual
+value. `showing_actual` adds it to any matcher's rejection on request, at the cost of a renderer for the subject. Constructor
 paths support Rust's qualified and absolute forms. `variant::Type` means the optional marker followed by an absolute path.
 Use `r#variant::Type` for a module named `variant`. Bare constructors named `variant` remain ordinary constructors.
 

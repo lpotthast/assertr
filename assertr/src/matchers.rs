@@ -69,7 +69,7 @@
 //! | Jiff (`jiff`) | `signed_duration`, `span`, `zoned` |
 //! | Programs and reports (`program`, `rootcause`) | `program`, `report` |
 //! | Tokio (`tokio`) | `tokio_mutex`, `tokio_rw_lock`, `watch` |
-//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`each_in_any_order`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`anything`] |
+//! | Combining checks | [`all_of`], [`any_of`], [`each`], [`each_in_any_order`], [`field`], [`predicate`], [`satisfying`], [`dereferenced`], [`showing_actual`], [`anything`] |
 //!
 //! Each matcher's page lists the subjects it supports and what it needs to render a failure. This
 //! module is the public home of these types. Import `matchers::*` next to `prelude::*` if you want
@@ -280,6 +280,7 @@ pub use crate::{
         field::{Field, field},
         predicate::{Predicate, predicate},
         satisfying::{Satisfying, satisfying},
+        showing_actual::{ShowingActual, showing_actual},
     },
 };
 
