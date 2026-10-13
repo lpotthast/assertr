@@ -11,8 +11,7 @@ use super::{
 };
 use crate::{
     assertions::{collection::Placement, support::indexed_equality_mismatch},
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{Evidence, MatcherList, context::unsatisfied},
+    expectation::{Evidence, ExpectedOperand, MatcherList, context::unsatisfied, operand_view},
     failure::{Fact, PathSegment},
 };
 
@@ -224,7 +223,7 @@ where
     I: Iterator,
     I::Item: Borrow<T>,
     T: PartialEq<E::View>,
-    E: BorrowFor<T>,
+    E: ExpectedOperand<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>,
 {
     type Rejection = Rejection<I::Item>;
@@ -251,7 +250,7 @@ where
             context
         };
         let check = |slot: usize, position, actual: &T, context: &mut AssertionContext<'_, R>| {
-            let expected = borrow_for::<T, _>(&self.expected[slot]);
+            let expected = operand_view::<T, _>(&self.expected[slot]);
             let matched = actual.eq(expected);
             if !matched {
                 // Construct indexed evidence only for retained rejections.

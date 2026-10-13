@@ -7,7 +7,7 @@ use num_traits::{Num, float::FloatCore};
 pub use super::distance::{IsCloseTo, NumericDistance};
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
+    expectation::ExpectedOperand,
     renderer::{DebugRenderer, ValueRenderer},
 };
 
@@ -169,7 +169,7 @@ pub trait NumAssertions<T: Num, R = DebugRenderer> {
     /// math features (`std` or `libm`) are required. A type from another crate cannot implement
     /// it. Assert on a supported projection, use a predicate, or wrap it in a local newtype, as
     /// shown in [foreign numeric types](NumericDistance#foreign-numeric-types).
-    fn is_close_to<E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>>(
+    fn is_close_to<E: ExpectedOperand<T, View = T>, D: ExpectedOperand<T, View = T>>(
         self,
         expected: E,
         allowed_deviation: D,
@@ -268,7 +268,7 @@ impl<T: Num, M: Mode, R> NumAssertions<T, R> for AssertThat<'_, T, M, R> {
     }
 
     #[track_caller]
-    fn is_close_to<E: BorrowFor<T, View = T>, D: BorrowFor<T, View = T>>(
+    fn is_close_to<E: ExpectedOperand<T, View = T>, D: ExpectedOperand<T, View = T>>(
         self,
         expected: E,
         allowed_deviation: D,

@@ -9,8 +9,7 @@ use crate::{
         collection::MissingElementsRejection, core::partial_eq::operand_expectation,
         support::length_facts,
     },
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation, passed},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view, passed},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::{RenderingOrder, ValueRenderer},
 };
@@ -74,16 +73,16 @@ fn record_value_mismatch<V, Q: ?Sized, EV: ?Sized, R>(
 }
 
 /// The native lookup query an operand selects for a map's stored key type.
-fn query<Mp: Map + ?Sized, E: BorrowFor<Mp::Key>>(key: &E) -> &E::View {
-    borrow_for::<Mp::Key, _>(key)
+fn query<Mp: Map + ?Sized, E: ExpectedOperand<Mp::Key>>(key: &E) -> &E::View {
+    operand_view::<Mp::Key, _>(key)
 }
 
 /// Checks key presence through native lookup of the key operand's borrowed view, without
 /// imposing key equality bounds.
 ///
-/// The operand selects its view through [`BorrowFor`] with the stored key type as context, like
-/// the bulk key operands, so a `String` key accepts `"retries"` and an owned or borrowed key
-/// works as well.
+/// The operand selects its view through [`BorrowFor`](crate::borrow_for::BorrowFor) with the stored
+/// key type as context, like the bulk key operands, so a `String` key accepts `"retries"` and an
+/// owned or borrowed key works as well.
 #[derive(Debug, Clone, Copy)]
 pub struct ContainsKey<E>(E);
 
@@ -99,8 +98,8 @@ impl<E> ContainsKey<E> {
 // Fully qualified views avoid a bound cycle without an independently inferred query parameter.
 impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for ContainsKey<E>
 where
-    Mp: MapLookup<<E as BorrowFor<<Mp as Map>::Key>>::View>,
-    E: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<E as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    E: ExpectedOperand<Mp::Key>,
     R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
 {
     type Success<'a>
@@ -159,8 +158,8 @@ impl<E> DoesNotContainKey<E> {
 
 impl<Mp: Map + ?Sized, E, R> Expectation<Mp, R> for DoesNotContainKey<E>
 where
-    Mp: MapLookup<<E as BorrowFor<<Mp as Map>::Key>>::View>,
-    E: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<E as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    E: ExpectedOperand<Mp::Key>,
     R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
 {
     type Success<'a>
@@ -217,7 +216,7 @@ impl<E> ContainsValue<E> {
 operand_expectation! {
     impl [Mp: Map + ?Sized, E, R] for ContainsValue<E>, subject Mp, where [
         Mp::Value: PartialEq<E::View>,
-        E: BorrowFor<Mp::Value>,
+        E: ExpectedOperand<Mp::Value>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
     ];
     borrow 0 for Mp::Value, view E::View;
@@ -243,7 +242,7 @@ impl<E> DoesNotContainValue<E> {
 operand_expectation! {
     impl [Mp: Map + ?Sized, E, R] for DoesNotContainValue<E>, subject Mp, where [
         Mp::Value: PartialEq<E::View>,
-        E: BorrowFor<Mp::Value>,
+        E: ExpectedOperand<Mp::Value>,
         R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
     ];
     borrow 0 for Mp::Value, view E::View;
@@ -254,8 +253,8 @@ operand_expectation! {
 }
 
 /// Checks a map entry with one native lookup and one expected-value borrow. Both operands select
-/// their views through [`BorrowFor`], the key with the stored key type as context and the value
-/// with the stored value type.
+/// their views through [`BorrowFor`](crate::borrow_for::BorrowFor), the key with the stored key
+/// type as context and the value with the stored value type.
 #[derive(Debug, Clone)]
 pub struct ContainsEntry<EK, EV> {
     key: EK,
@@ -272,10 +271,10 @@ impl<EK, EV> ContainsEntry<EK, EV> {
 
 impl<Mp: Map + ?Sized, EK, EV, R> Expectation<Mp, R> for ContainsEntry<EK, EV>
 where
-    Mp: MapLookup<<EK as BorrowFor<<Mp as Map>::Key>>::View>,
-    EK: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<EK as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    EK: ExpectedOperand<Mp::Key>,
     Mp::Value: PartialEq<EV::View>,
-    EV: BorrowFor<Mp::Value>,
+    EV: ExpectedOperand<Mp::Value>,
     R: ValueRenderer<Mp::Key>
         + ValueRenderer<Mp::Value>
         + ValueRenderer<EK::View>
@@ -297,7 +296,7 @@ where
         actual: &'a Mp,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<Mp::Value, _>(&self.value);
+        let expected = operand_view::<Mp::Value, _>(&self.value);
         match actual.get_key_value(query::<Mp, _>(&self.key)) {
             None => Err(None),
             Some((_, value)) if value.eq(expected) => Ok(()),
@@ -318,7 +317,7 @@ where
         match rejected {
             None => failure.relation("contains the entry").expected((
                 render.value(key),
-                render.value(borrow_for::<Mp::Value, _>(&self.value)),
+                render.value(operand_view::<Mp::Value, _>(&self.value)),
             )),
             Some((actual, rejection)) => {
                 let failure = failure.actual(render.map(actual));
@@ -357,10 +356,10 @@ impl<EK, EV> DoesNotContainEntry<EK, EV> {
 
 impl<Mp: Map + ?Sized, EK, EV, R> Expectation<Mp, R> for DoesNotContainEntry<EK, EV>
 where
-    Mp: MapLookup<<EK as BorrowFor<<Mp as Map>::Key>>::View>,
-    EK: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<EK as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    EK: ExpectedOperand<Mp::Key>,
     Mp::Value: PartialEq<EV::View>,
-    EV: BorrowFor<Mp::Value>,
+    EV: ExpectedOperand<Mp::Value>,
     R: ValueRenderer<Mp::Key>
         + ValueRenderer<Mp::Value>
         + ValueRenderer<EK::View>
@@ -382,7 +381,7 @@ where
         actual: &'a Mp,
         _: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
-        let expected = borrow_for::<Mp::Value, _>(&self.value);
+        let expected = operand_view::<Mp::Value, _>(&self.value);
         if actual
             .get_key_value(query::<Mp, _>(&self.key))
             .is_some_and(|(_, value)| value.eq(expected))
@@ -405,7 +404,7 @@ where
         let (failure, expected) = match rejected {
             None => (
                 failure.relation("does not contain the entry"),
-                borrow_for::<Mp::Value, _>(&self.value),
+                operand_view::<Mp::Value, _>(&self.value),
             ),
             Some((actual, expected)) => (
                 failure
@@ -432,8 +431,8 @@ expected_operands_traits!(ContainsKeys<E, B>, operand, new);
 // Fully qualified views avoid a bound cycle without an independently inferred query parameter.
 impl<Mp: Map + ?Sized, E, B, R> Expectation<Mp, R> for ContainsKeys<E, B>
 where
-    Mp: MapLookup<<E as BorrowFor<<Mp as Map>::Key>>::View>,
-    E: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<E as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    E: ExpectedOperand<Mp::Key>,
     B: AsRef<[E]>,
     R: ValueRenderer<Mp::Key> + ValueRenderer<Mp::Value> + ValueRenderer<E::View>,
 {
@@ -455,7 +454,7 @@ where
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let mut missing = Vec::new();
         for key in self.expected.as_ref() {
-            let query = borrow_for::<Mp::Key, _>(key);
+            let query = operand_view::<Mp::Key, _>(key);
             if actual.get_key_value(query).is_none() {
                 missing.push(query);
             }
@@ -544,10 +543,10 @@ impl<EK, EV, B: AsRef<[(EK, EV)]>> ContainsExactlyEntries<EK, EV, B> {
 
 impl<Mp: Map + ?Sized, EK, EV, B, R> Expectation<Mp, R> for ContainsExactlyEntries<EK, EV, B>
 where
-    Mp: MapLookup<<EK as BorrowFor<<Mp as Map>::Key>>::View>,
-    EK: BorrowFor<Mp::Key>,
+    Mp: MapLookup<<EK as ExpectedOperand<<Mp as Map>::Key>>::View>,
+    EK: ExpectedOperand<Mp::Key>,
     Mp::Value: PartialEq<EV::View>,
-    EV: BorrowFor<Mp::Value>,
+    EV: ExpectedOperand<Mp::Value>,
     B: AsRef<[(EK, EV)]>,
     R: ValueRenderer<Mp::Key>
         + ValueRenderer<Mp::Value>
@@ -577,8 +576,8 @@ where
         let mut mismatches = Vec::new();
         let mut found = FoundEntries::new();
         for (key, value) in expected {
-            let key = borrow_for::<Mp::Key, _>(key);
-            let expected_value = borrow_for::<Mp::Value, _>(value);
+            let key = operand_view::<Mp::Key, _>(key);
+            let expected_value = operand_view::<Mp::Value, _>(value);
             match actual.get_key_value(key) {
                 None => missing.push(key),
                 Some((stored_key, value)) => {

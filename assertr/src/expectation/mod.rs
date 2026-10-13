@@ -49,6 +49,7 @@ pub(crate) mod context;
 pub(crate) mod dereferenced;
 pub(crate) mod field;
 pub(crate) mod lists;
+pub(crate) mod operand;
 pub(crate) mod predicate;
 pub(crate) mod satisfying;
 pub(crate) mod showing_actual;
@@ -57,6 +58,8 @@ use alloc::{boxed::Box, vec::Vec};
 
 pub use context::AssertionContext;
 pub use lists::MatcherList;
+pub use operand::ExpectedOperand;
+pub(crate) use operand::operand_view;
 
 pub use crate::assertions::map::EntryMatcherList;
 use crate::{

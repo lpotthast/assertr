@@ -13,8 +13,7 @@ use core::{
 use super::partial_eq::operand_expectation;
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
-    expectation::{AssertionContext, Expectation, passed},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, passed},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, RenderingContext, ValueRenderer},
 };
@@ -43,9 +42,10 @@ impl<B> ContainsElement<B> {
     /// Owns an operand whose borrowed view is selected for bound type `B`.
     ///
     /// Pass a reference to reuse an expected value. Construction does not borrow or clone the
-    /// operand. Evaluation borrows it through [`BorrowFor`]. Diagnostics require renderers for
-    /// `B` and `E::View`, without requiring one for the operand wrapper.
-    /// For borrowed bounds, selecting the pointee type also avoids needing a reference renderer.
+    /// operand. Evaluation borrows it through [`BorrowFor`](crate::borrow_for::BorrowFor).
+    /// Diagnostics require renderers for `B` and `E::View`, without requiring one for the
+    /// operand wrapper. For borrowed bounds, selecting the pointee type also avoids needing a
+    /// reference renderer.
     ///
     /// ```
     /// use assertr::{matchers::range::ContainsElement, prelude::*};
@@ -55,7 +55,7 @@ impl<B> ContainsElement<B> {
     /// assert_that!(String::from("a")..String::from("c")).matches(&expected);
     /// ```
     #[must_use]
-    pub const fn borrowing<E: BorrowFor<B>>(expected: E) -> ContainsElement<B, E> {
+    pub const fn borrowing<E: ExpectedOperand<B>>(expected: E) -> ContainsElement<B, E> {
         ContainsElement(expected, PhantomData)
     }
 }
@@ -63,7 +63,7 @@ impl<B> ContainsElement<B> {
 operand_expectation! {
     impl [B, E, Range: RangeBounds<B> + ?Sized, R] for ContainsElement<B, E>, subject Range, where [
         B: PartialOrd<E::View>,
-        E: BorrowFor<B>,
+        E: ExpectedOperand<B>,
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>,
     ];
@@ -107,7 +107,7 @@ impl<B> DoesNotContainElement<B> {
     /// assert_that!(String::from("a")..String::from("c")).matches(&unexpected);
     /// ```
     #[must_use]
-    pub const fn borrowing<E: BorrowFor<B>>(unexpected: E) -> DoesNotContainElement<B, E> {
+    pub const fn borrowing<E: ExpectedOperand<B>>(unexpected: E) -> DoesNotContainElement<B, E> {
         DoesNotContainElement(unexpected, PhantomData)
     }
 }
@@ -116,7 +116,7 @@ operand_expectation! {
     impl [B, E, Range: RangeBounds<B> + ?Sized, R] for DoesNotContainElement<B, E>, subject Range,
     where [
         B: PartialOrd<E::View>,
-        E: BorrowFor<B>,
+        E: ExpectedOperand<B>,
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>,
     ];
@@ -270,14 +270,14 @@ impl<B: PartialOrd, Range: RangeBounds<B>, R: ValueRenderer<B>> Expectation<B, R
 #[allow(clippy::return_self_not_must_use)]
 pub trait RangeBoundAssertions<B, R = DebugRenderer> {
     /// Asserts that the range contains `expected`.
-    fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
+    fn contains_element<E: ExpectedOperand<B>>(self, expected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
         R: ValueRenderer<B> + ValueRenderer<E::View>;
 
     /// Asserts that the range does not contain `unexpected`.
-    fn does_not_contain_element<E: BorrowFor<B>>(self, unexpected: E) -> Self
+    fn does_not_contain_element<E: ExpectedOperand<B>>(self, unexpected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
@@ -318,7 +318,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, R>
     for AssertThat<'_, Range, M, R>
 {
     #[track_caller]
-    fn contains_element<E: BorrowFor<B>>(self, expected: E) -> Self
+    fn contains_element<E: ExpectedOperand<B>>(self, expected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
@@ -328,7 +328,7 @@ impl<B, Range: RangeBounds<B>, M: Mode, R> RangeBoundAssertions<B, R>
     }
 
     #[track_caller]
-    fn does_not_contain_element<E: BorrowFor<B>>(self, unexpected: E) -> Self
+    fn does_not_contain_element<E: ExpectedOperand<B>>(self, unexpected: E) -> Self
     where
         B: PartialOrd<E::View>,
         E::View: PartialOrd<B>,
@@ -370,7 +370,7 @@ macro_rules! borrowed_range_assertions {
     (@method $($(#[$attr:meta])* $name:ident($operand:ident) => $target:path;)+) => {$(
         $(#[$attr])*
         #[track_caller]
-        pub fn $name<E: BorrowFor<B>>(self, $operand: E) -> Self
+        pub fn $name<E: ExpectedOperand<B>>(self, $operand: E) -> Self
         where
             B: PartialOrd<E::View>,
             E::View: PartialOrd<B>,

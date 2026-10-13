@@ -5,7 +5,7 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.9.0] - 2026-10-13
 
 ### Added
 
@@ -40,6 +40,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Comparing assertions and matchers bound their expected values with the new `expectation::ExpectedOperand<T>`, which
+  every `BorrowFor<T>` operand implements. An unsupported operand now fails to compile with "`&str` cannot be used as an
+  expected value for `i32`" and suggestions, instead of listing unrelated `BorrowFor` implementations.
 - **Breaking:** Single-key map assertions (`contains_key`, `does_not_contain_key`, `contains_entry`,
   `contains_entry_matching`, `contains_entry_satisfying`, and `does_not_contain_entry`) and the matchers `ContainsKey`,
   `DoesNotContainKey`, `ContainsEntry`, and `DoesNotContainEntry` take their key by value through `BorrowFor<K>`, like
@@ -62,7 +65,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   as `At [2]:`. The new `each_in_any_order(..)` keeps the previous order-free behavior for any collection, such as a
   `HashSet`.
 - A `partial!` matcher accepts every subject that borrows its pattern's type, such as the `&User` returned by
-  `Vec::first`, a `Box<User>`, or a reference-typed field, without `dereferenced(..)`. The compile error for a matcher of
+  `Vec::first`, a `Box<User>`, or a reference-typed field, without `dereferenced(..)`. The compile error for a matcher
+  of
   the wrong subject type now also suggests `dereferenced(..)` for reference and smart-pointer subjects.
 
 ## [0.8.0] - 2026-10-11
@@ -305,7 +309,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   `.as_json().is_ok_satisfying(...)` in capture mode, and likewise for TOML.
 - **Breaking:** Payload extraction (`downcast` and `downcast_ref`) moves from `BoxAssertions` and
   `PanicValueAssertions` to `BoxExtractAssertions`, which covers boxed `dyn Any` payloads and `PanicValue`.
-  `BoxAssertions` keeps the non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import `BoxExtractAssertions` or use the prelude.
+  `BoxAssertions` keeps the non-extracting `is_of_type`, and `PanicValueAssertions` is removed. Import
+  `BoxExtractAssertions` or use the prelude.
 - **Breaking:** `RootcauseReportAssertions`, `RootcauseDynamicReportAssertions`, and
   `RootcauseDynamicReportExtractAssertions` cover both `Report` and `ReportRef` subjects. Replace imports of
   `RootcauseReportRefAssertions`, `RootcauseDynamicReportRefAssertions`, and

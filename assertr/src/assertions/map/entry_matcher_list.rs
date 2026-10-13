@@ -6,8 +6,10 @@ use crate::{
     __private::{Cons, Nil},
     AssertThat,
     assertions::map::{Entry, Map, MapLookup},
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation, MatcherList, lists::sealed as list_sealed},
+    expectation::{
+        AssertionContext, Expectation, ExpectedOperand, MatcherList, lists::sealed as list_sealed,
+        operand_view,
+    },
     failure::{AssertionFailure, FailureBuilder, FailureKind},
     matchers::satisfying,
     mode::Capture,
@@ -56,7 +58,7 @@ impl<K, M, T> sealed::Sealed for Cons<Entry<K, M>, T> {}
 impl<MapType, StoredKey, R, K, M, T> EntryMatcherList<MapType, R> for Cons<Entry<K, M>, T>
 where
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-    K: BorrowFor<StoredKey>,
+    K: ExpectedOperand<StoredKey>,
     M: Expectation<MapType::Value, R>,
     R: ValueRenderer<K::View>,
     T: EntryMatcherList<MapType, R>,
@@ -82,7 +84,7 @@ macro_rules! homogeneous {
         impl<MapType, StoredKey, R, K, M $(, const $size: usize)?> EntryMatcherList<MapType, R> for $type
         where
             MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-            K: BorrowFor<StoredKey>,
+            K: ExpectedOperand<StoredKey>,
             M: Expectation<MapType::Value, R>,
             R: ValueRenderer<K::View>,
         {
@@ -136,7 +138,7 @@ impl<MapType, StoredKey, R, L, K, F> MatcherList<MapType, R> for SatisfyingEntry
 where
     L: AsRef<[(K, F)]>,
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-    K: BorrowFor<StoredKey>,
+    K: ExpectedOperand<StoredKey>,
     F: for<'a> Fn(AssertThat<'a, MapType::Value, Capture, R>),
     R: ValueRenderer<K::View> + Clone,
 {
@@ -147,7 +149,7 @@ where
     fn describe_at(&self, index: usize, context: &AssertionContext<'_, R>) -> AssertionFailure {
         let (key, assertions) = &self.0.as_ref()[index];
         explain_entry::<MapType::Value, _, _, _>(
-            || borrow_for::<StoredKey, _>(key),
+            || operand_view::<StoredKey, _>(key),
             &satisfying(assertions),
             None,
             FailureBuilder::new::<MapType>(FailureKind::Matching),
@@ -170,7 +172,7 @@ impl<MapType, StoredKey, R, L, K, F> EntryMatcherList<MapType, R> for Satisfying
 where
     L: AsRef<[(K, F)]>,
     MapType: Map<Key = StoredKey> + MapLookup<K::View> + ?Sized,
-    K: BorrowFor<StoredKey>,
+    K: ExpectedOperand<StoredKey>,
     F: for<'a> Fn(AssertThat<'a, MapType::Value, Capture, R>),
     R: ValueRenderer<K::View> + Clone,
 {

@@ -78,6 +78,7 @@ for detailed requirements and exceptions.
 | [Probe](expectation-execution.md#budgets-and-probes) | Evaluation that does not retain built-in diagnostics. |
 | [Expected data](comparison-operands.md#reading-expected-data-again) | A bulk list of operands that must give the same list and comparison values on every access. |
 | [BorrowFor](comparison-operands.md#borrowed-views) | Selects the view borrowed from an operand for a given subject, item, key, value, or bound type. |
+| [ExpectedOperand](comparison-operands.md#borrowed-views) | The bound comparing assertions place on expected values. Implemented for every `BorrowFor` operand, it explains rejected operands. |
 | [Exact unordered assignment](matcher-composition.md#exact-unordered-assignment) | Maximum one-to-one pairing of actual occurrences and expected slots. |
 | [Multiplicity](matcher-composition.md#exact-unordered-assignment) | Occurrence count. |
 

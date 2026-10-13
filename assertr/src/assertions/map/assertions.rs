@@ -5,8 +5,7 @@ use super::{
 use crate::{
     AssertThat, Mode,
     assertions::map::EntryMatcherList,
-    borrow_for::BorrowFor,
-    expectation::Expectation,
+    expectation::{Expectation, ExpectedOperand},
     matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
@@ -15,11 +14,12 @@ use crate::{
 /// Assertions over the keys, values, and entries of a map: `BTreeMap`, `HashMap`, and every type
 /// implementing [`Map`].
 ///
-/// Every key operand, single or bulk, implements [`BorrowFor<K>`], selecting `View` with the stored
-/// key type `K` as context, and is looked up through native [`MapLookup<View>`](MapLookup). So
-/// `contains_key("retries")` works on `String` keys, and `contains_key(&key)` with a stored key. Selection
-/// grants no lookup capability: hash maps require hashing and equality, tree maps require ordering,
-/// and custom maps impose their own bounds. There is no fallback to an equality scan.
+/// Every key operand, single or bulk, implements [`BorrowFor<K>`](crate::borrow_for::BorrowFor),
+/// selecting `View` with the stored key type `K` as context, and is looked up through native
+/// [`MapLookup<View>`](MapLookup). So `contains_key("retries")` works on `String` keys, and
+/// `contains_key(&key)` with a stored key. Selection grants no lookup capability: hash maps require
+/// hashing and equality, tree maps require ordering, and custom maps impose their own bounds. There
+/// is no fallback to an equality scan.
 ///
 /// The renderer must render the selected query view, plus the stored keys and values used in
 /// diagnostics. Operand wrappers need no renderer or `Clone`. Keyed matchers render the same query
@@ -66,14 +66,14 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Asserts that the map has an entry under `expected`, regardless of its value.
     fn contains_key<E>(self, expected: E) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Self::Map: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that the map has no entry under `not_expected`.
     fn does_not_contain_key<E>(self, not_expected: E) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Self::Map: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
@@ -81,7 +81,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     fn contains_value<E>(self, expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that some map value matches `expected`.
@@ -93,12 +93,12 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
     /// Asserts that the map maps `key` to `value`.
     ///
-    /// `value` can be owned or borrowed through [`BorrowFor<V>`](BorrowFor).
+    /// `value` can be owned or borrowed through [`BorrowFor<V>`](crate::borrow_for::BorrowFor).
     /// Stored `String` values also accept literals. Reference-valued entries keep their declared
     /// type.
     ///
@@ -106,10 +106,10 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// reported once.
     fn contains_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>;
 
     /// Asserts that the map has `key` and its value matches `expected`.
@@ -126,7 +126,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// ```
     fn contains_entry_matching<EK, E>(self, key: EK, expected: E) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         E: Expectation<V, R>,
         R: ValueRenderer<EK::View>;
@@ -138,7 +138,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// key.
     fn contains_entry_satisfying<EK, A>(self, key: EK, assertions: A) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<EK::View> + Clone;
@@ -146,13 +146,13 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Asserts that the map does not map `key` to `value`. This passes when the key is absent as
     /// well as when it is present with a different value. Like
     /// [`contains_entry`](MapAssertions::contains_entry), the operand selects a borrowed view
-    /// through [`BorrowFor`] for the declared value type.
+    /// through [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared value type.
     fn does_not_contain_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>;
 
     /// Asserts that every expected key is present. Extra map keys are allowed.
@@ -162,7 +162,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// Successful checks allocate no query-view buffer. Collect generators explicitly first.
     fn contains_keys<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Self::Map: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>;
 
@@ -184,10 +184,10 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// ```
     fn contains_exactly_entries<EK, EV>(self, expected: impl AsRef<[(EK, EV)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K>
             + ValueRenderer<V>
             + ValueRenderer<EK::View>
@@ -230,7 +230,7 @@ pub trait MapAssertions<K, V, R = DebugRenderer> {
     /// bulk methods. Collect generators explicitly first.
     fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Self::Map: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone;
@@ -247,7 +247,7 @@ where
     #[track_caller]
     fn contains_key<E>(self, expected: E) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Mp: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
@@ -257,7 +257,7 @@ where
     #[track_caller]
     fn does_not_contain_key<E>(self, not_expected: E) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Mp: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
@@ -268,7 +268,7 @@ where
     fn contains_value<E>(self, expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::ContainsValue::new(expected))
@@ -286,7 +286,7 @@ where
     fn does_not_contain_value<E>(self, not_expected: E) -> Self
     where
         V: PartialEq<E::View>,
-        E: BorrowFor<V>,
+        E: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
         self.matches(imp::DoesNotContainValue::new(not_expected))
@@ -295,10 +295,10 @@ where
     #[track_caller]
     fn contains_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>,
     {
         self.matches(imp::ContainsEntry::new(key, value))
@@ -307,7 +307,7 @@ where
     #[track_caller]
     fn contains_entry_matching<EK, E>(self, key: EK, expected: E) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         E: Expectation<V, R>,
         R: ValueRenderer<EK::View>,
@@ -318,7 +318,7 @@ where
     #[track_caller]
     fn contains_entry_satisfying<EK, A>(self, key: EK, assertions: A) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<EK::View> + Clone,
@@ -329,10 +329,10 @@ where
     #[track_caller]
     fn does_not_contain_entry<EK, EV>(self, key: EK, value: EV) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<EK::View> + ValueRenderer<EV::View>,
     {
         self.matches(imp::DoesNotContainEntry::new(key, value))
@@ -341,7 +341,7 @@ where
     #[track_caller]
     fn contains_keys<E>(self, expected: impl AsRef<[E]>) -> Self
     where
-        E: BorrowFor<K>,
+        E: ExpectedOperand<K>,
         Mp: MapLookup<E::View>,
         R: ValueRenderer<K> + ValueRenderer<V> + ValueRenderer<E::View>,
     {
@@ -351,10 +351,10 @@ where
     #[track_caller]
     fn contains_exactly_entries<EK, EV>(self, expected: impl AsRef<[(EK, EV)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         V: PartialEq<EV::View>,
-        EV: BorrowFor<V>,
+        EV: ExpectedOperand<V>,
         R: ValueRenderer<K>
             + ValueRenderer<usize>
             + ValueRenderer<V>
@@ -376,7 +376,7 @@ where
     #[track_caller]
     fn contains_exactly_entries_satisfying<EK, A>(self, assertions: impl AsRef<[(EK, A)]>) -> Self
     where
-        EK: BorrowFor<K>,
+        EK: ExpectedOperand<K>,
         Mp: MapLookup<EK::View>,
         A: for<'a> Fn(AssertThat<'a, V, Capture, R>),
         R: ValueRenderer<K> + ValueRenderer<EK::View> + ValueRenderer<usize> + Clone,

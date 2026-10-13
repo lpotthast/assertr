@@ -12,8 +12,7 @@ use super::{
 };
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
-    expectation::{AssertionContext, Expectation, lists::SatisfyingList},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, lists::SatisfyingList},
     failure::{FailureBuilder, FailureKind},
     mode::{Capture, Panic},
     renderer::{DebugRenderer, ValueRenderer},
@@ -82,7 +81,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's prefix matches the expected matcher list in order.
@@ -106,7 +105,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View> + ValueRenderer<usize>;
 
     /// Asserts that the collection's suffix matches the expected matcher list in order.
@@ -130,7 +129,7 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that a contiguous subsequence matches the expected matcher list in order.
@@ -152,13 +151,13 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
 
     /// Asserts positional equality with `expected`, including length.
     ///
-    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
-    /// collection item type `T`. Arrays, slices, and vectors supply the expected list through
-    /// `AsRef<[E]>`.
+    /// Each expected element `E` selects a borrowed view through
+    /// [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared collection item type `T`.
+    /// Arrays, slices, and vectors supply the expected list through `AsRef<[E]>`.
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that each element matches the constraint at the same position, including length.
@@ -202,7 +201,7 @@ where
     fn starts_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.matches(value::StartsWith::new(expected))
@@ -230,7 +229,7 @@ where
     fn ends_with<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View> + ValueRenderer<usize>,
     {
         self.matches(value::EndsWith::new(expected))
@@ -258,7 +257,7 @@ where
     fn contains_contiguous<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsContiguous::new(expected))
@@ -288,7 +287,7 @@ where
     fn contains_exactly<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsExactly::new(expected))

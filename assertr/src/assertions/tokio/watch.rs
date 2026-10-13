@@ -2,8 +2,7 @@ use tokio::sync::watch::{Receiver, Ref};
 
 use crate::{
     AssertThat, Mode,
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view},
     failure::{FailureBuilder, FailureKind},
     renderer::{DebugRenderer, ValueRenderer},
 };
@@ -23,7 +22,7 @@ impl<E> HasCurrentValue<E> {
 impl<T, E, R> Expectation<Receiver<T>, R> for HasCurrentValue<E>
 where
     T: PartialEq<E::View>,
-    E: BorrowFor<T>,
+    E: ExpectedOperand<T>,
     R: ValueRenderer<T> + ValueRenderer<E::View>,
 {
     type Success<'a>
@@ -43,7 +42,7 @@ where
         _context: &AssertionContext<'_, R>,
     ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
         let actual = Receiver::borrow(actual);
-        let expected = borrow_for::<T, _>(&self.0);
+        let expected = operand_view::<T, _>(&self.0);
         if *actual == *expected {
             Ok(())
         } else {
@@ -63,7 +62,7 @@ where
         match rejected {
             None => failure
                 .relation("has the current value")
-                .expected(render.value(borrow_for::<T, _>(&self.0))),
+                .expected(render.value(operand_view::<T, _>(&self.0))),
             Some((_, (actual, expected))) => failure
                 .actual(render.value(&*actual))
                 .expected(render.value(expected)),
@@ -141,7 +140,7 @@ pub trait TokioWatchReceiverAssertions<T, R = DebugRenderer> {
     fn has_current_value<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that the current value has not been seen by this receiver.
@@ -160,7 +159,7 @@ impl<T, M: Mode, R> TokioWatchReceiverAssertions<T, R> for AssertThat<'_, Receiv
     fn has_current_value<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>,
     {
         self.matches(HasCurrentValue::new(expected))

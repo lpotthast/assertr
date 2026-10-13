@@ -32,7 +32,10 @@ subject, item, key, value, or range-bound type. Assertr does not infer a separat
 therefore select different views when used with different subject types.
 
 The `borrow-for` crate defines the standard selections and lets custom wrappers provide their own. Assertr re-exports it as
-`assertr::borrow_for`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
+`assertr::borrow_for`. Public bounds name `ExpectedOperand<A>` instead of `BorrowFor<A>`. Its only implementation is a
+blanket one over every `BorrowFor<A>` operand, marked `#[diagnostic::do_not_recommend]`, so a rejected operand reports
+assertr's explanation and alternatives instead of a list of unrelated `BorrowFor` implementations. Custom operands still
+implement `BorrowFor`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
 and wrapper implementations.
 
 | Check                                                          | Required comparison                                                                                   |

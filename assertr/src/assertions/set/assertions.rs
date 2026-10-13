@@ -2,7 +2,7 @@ use super::{SetLookup, imp};
 use crate::{
     AssertThat, Mode,
     assertions::collection::Collection,
-    borrow_for::BorrowFor,
+    expectation::ExpectedOperand,
     renderer::{DebugRenderer, ValueRenderer},
 };
 
@@ -13,9 +13,9 @@ use crate::{
 ///
 /// The other side of every relation can be any collection: another set of any kind, an array, a
 /// slice, or a vector. Its elements select a borrowed view of the subject's element type through
-/// [`BorrowFor`], like other expected values, and are looked up in the subject through its native
-/// [`SetLookup`]. So a `HashSet<String>` can be compared against `["read", "write"]`, and a
-/// `HashSet` against a `BTreeSet`.
+/// [`BorrowFor`](crate::borrow_for::BorrowFor), like other expected values, and are looked up in
+/// the subject through its native [`SetLookup`]. So a `HashSet<String>` can be compared against
+/// `["read", "write"]`, and a `HashSet` against a `BTreeSet`.
 ///
 /// ```
 /// use std::collections::{BTreeSet, HashSet};
@@ -48,24 +48,24 @@ pub trait SetAssertions<T, R = DebugRenderer> {
     fn is_subset_of<O>(self, expected_superset: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        Self::Set: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        Self::Set: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>;
 
     /// Asserts that every element of `expected_subset` belongs to the subject.
     fn is_superset_of<O>(self, expected_subset: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        Self::Set: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        Self::Set: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>;
 
     /// Asserts that no element of `other` belongs to the subject.
     fn is_disjoint_from<O>(self, other: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        Self::Set: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        Self::Set: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>;
 }
 
@@ -81,8 +81,8 @@ where
     fn is_subset_of<O>(self, expected_superset: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        S: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        S: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>,
     {
         self.matches(imp::IsSubsetOf::new(expected_superset))
@@ -92,8 +92,8 @@ where
     fn is_superset_of<O>(self, expected_subset: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        S: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        S: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>,
     {
         self.matches(imp::IsSupersetOf::new(expected_subset))
@@ -103,8 +103,8 @@ where
     fn is_disjoint_from<O>(self, other: O) -> Self
     where
         O: Collection,
-        O::Item: BorrowFor<T>,
-        S: SetLookup<<O::Item as BorrowFor<T>>::View>,
+        O::Item: ExpectedOperand<T>,
+        S: SetLookup<<O::Item as ExpectedOperand<T>>::View>,
         R: ValueRenderer<T> + ValueRenderer<O::Item>,
     {
         self.matches(imp::IsDisjointFrom::new(other))

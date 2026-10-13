@@ -6,8 +6,7 @@ use core::ptr;
 use super::SetLookup;
 use crate::{
     assertions::collection::Collection,
-    borrow_for::{BorrowFor, borrow_for},
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Expectation, ExpectedOperand, operand_view},
     failure::{Fact, FailureBuilder, FailureKind},
     renderer::{RenderingOrder, ValueRenderer},
 };
@@ -50,8 +49,8 @@ impl SetRelation {
 }
 
 /// The native lookup query an operand element selects for the subject's element type.
-fn query<S: Collection + ?Sized, E: BorrowFor<S::Item>>(element: &E) -> &E::View {
-    borrow_for::<S::Item, _>(element)
+fn query<S: Collection + ?Sized, E: ExpectedOperand<S::Item>>(element: &E) -> &E::View {
+    operand_view::<S::Item, _>(element)
 }
 
 const SUBSET: SetRelation = SetRelation {
@@ -95,10 +94,10 @@ set_relation_type!(
     /// in the set.
     ///
     /// The expected superset can be any [`Collection`] whose elements select a borrowed view of
-    /// the set's element type through [`BorrowFor`], such as another set, an array, or a vector.
-    /// The set's native [`SetLookup`] finds the stored elements the expected collection names. A
-    /// rejection lists the subject elements no expected element named, in the subject's
-    /// presentation order.
+    /// the set's element type through [`BorrowFor`](crate::borrow_for::BorrowFor), such as another
+    /// set, an array, or a vector. The set's native [`SetLookup`] finds the stored elements
+    /// the expected collection names. A rejection lists the subject elements no expected
+    /// element named, in the subject's presentation order.
     /// [`SetAssertions::is_subset_of`](crate::assertions::SetAssertions::is_subset_of) executes
     /// this same definition.
     ///
@@ -118,8 +117,9 @@ set_relation_type!(
     /// up in the set.
     ///
     /// The expected subset can be any [`Collection`] whose elements select a borrowed view of the
-    /// set's element type through [`BorrowFor`]. A rejection lists the expected elements missing
-    /// from the subject, in the expected collection's presentation order.
+    /// set's element type through [`BorrowFor`](crate::borrow_for::BorrowFor). A rejection lists
+    /// the expected elements missing from the subject, in the expected collection's
+    /// presentation order.
     /// [`SetAssertions::is_superset_of`](crate::assertions::SetAssertions::is_superset_of)
     /// executes this same definition.
     ///
@@ -139,8 +139,8 @@ set_relation_type!(
     /// elements up in the set.
     ///
     /// The other collection can be any [`Collection`] whose elements select a borrowed view of the
-    /// set's element type through [`BorrowFor`]. A rejection lists the overlapping elements as
-    /// stored in the subject, in the subject's presentation order.
+    /// set's element type through [`BorrowFor`](crate::borrow_for::BorrowFor). A rejection lists
+    /// the overlapping elements as stored in the subject, in the subject's presentation order.
     /// [`SetAssertions::is_disjoint_from`](crate::assertions::SetAssertions::is_disjoint_from)
     /// executes this same definition.
     ///
@@ -160,10 +160,10 @@ set_relation_type!(
 impl<S, O, R> Expectation<S, R> for IsSubsetOf<O>
 where
     S: Collection
-        + SetLookup<<<O as Collection>::Item as BorrowFor<<S as Collection>::Item>>::View>
+        + SetLookup<<<O as Collection>::Item as ExpectedOperand<<S as Collection>::Item>>::View>
         + ?Sized,
     O: Collection,
-    O::Item: BorrowFor<S::Item>,
+    O::Item: ExpectedOperand<S::Item>,
     R: ValueRenderer<S::Item> + ValueRenderer<O::Item>,
 {
     type Success<'a>
@@ -221,10 +221,10 @@ where
 impl<S, O, R> Expectation<S, R> for IsSupersetOf<O>
 where
     S: Collection
-        + SetLookup<<<O as Collection>::Item as BorrowFor<<S as Collection>::Item>>::View>
+        + SetLookup<<<O as Collection>::Item as ExpectedOperand<<S as Collection>::Item>>::View>
         + ?Sized,
     O: Collection,
-    O::Item: BorrowFor<S::Item>,
+    O::Item: ExpectedOperand<S::Item>,
     R: ValueRenderer<S::Item> + ValueRenderer<O::Item>,
 {
     type Success<'a>
@@ -273,10 +273,10 @@ where
 impl<S, O, R> Expectation<S, R> for IsDisjointFrom<O>
 where
     S: Collection
-        + SetLookup<<<O as Collection>::Item as BorrowFor<<S as Collection>::Item>>::View>
+        + SetLookup<<<O as Collection>::Item as ExpectedOperand<<S as Collection>::Item>>::View>
         + ?Sized,
     O: Collection,
-    O::Item: BorrowFor<S::Item>,
+    O::Item: ExpectedOperand<S::Item>,
     R: ValueRenderer<S::Item> + ValueRenderer<O::Item>,
 {
     type Success<'a>

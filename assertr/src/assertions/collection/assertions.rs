@@ -6,8 +6,7 @@ use super::{
 };
 use crate::{
     AssertThat, Mode,
-    borrow_for::BorrowFor,
-    expectation::{Expectation, lists::SatisfyingList},
+    expectation::{Expectation, ExpectedOperand, lists::SatisfyingList},
     matchers::satisfying,
     mode::Capture,
     renderer::{DebugRenderer, ValueRenderer},
@@ -16,9 +15,10 @@ use crate::{
 /// Assertions over the elements of a collection: slices, arrays, `Vec`, `VecDeque`, and every type
 /// implementing [`Collection`].
 ///
-/// Expected values can be owned or borrowed through [`BorrowFor<Collection::Item>`](BorrowFor).
-/// Reference-valued items keep their declared type. Use [`crate::matchers::dereferenced`] to match
-/// their pointees. Empty expected lists may need an explicit element type:
+/// Expected values can be owned or borrowed through
+/// [`BorrowFor<Collection::Item>`](crate::borrow_for::BorrowFor). Reference-valued items keep their
+/// declared type. Use [`crate::matchers::dereferenced`] to match their pointees. Empty expected
+/// lists may need an explicit element type:
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -84,7 +84,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn contains<E>(self, expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that at least one element matches `matcher`.
@@ -108,13 +108,14 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     /// Extra subject elements are allowed. Expectations are independent, so duplicates do not
     /// require distinct matches. Use `contains_exactly_in_any_order` for multiset equality.
     ///
-    /// Each expected element `E` selects a borrowed view through [`BorrowFor`] for the declared
-    /// collection item type `T`. Arrays, slices, and vectors reuse their storage. Prepare
-    /// generators explicitly with `.contains_all(generator.collect::<Vec<_>>())`.
+    /// Each expected element `E` selects a borrowed view through
+    /// [`BorrowFor`](crate::borrow_for::BorrowFor) for the declared collection item type `T`.
+    /// Arrays, slices, and vectors reuse their storage. Prepare generators explicitly with
+    /// `.contains_all(generator.collect::<Vec<_>>())`.
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that at least one element equals one of the `expected` values.
@@ -130,7 +131,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that no element equals any of the `unexpected` values.
@@ -147,7 +148,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that exactly `count` elements match `matcher`.
@@ -169,7 +170,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts that no element matches the unwanted constraint `not_expected`.
@@ -194,7 +195,7 @@ pub trait CollectionAssertions<T, R = DebugRenderer> {
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         T: PartialEq<E::View>,
-        E: BorrowFor<T>,
+        E: ExpectedOperand<T>,
         R: ValueRenderer<T> + ValueRenderer<E::View>;
 
     /// Asserts one-to-one matching between subject elements and matchers, independent of order.
@@ -271,7 +272,7 @@ where
     fn contains<E>(self, expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::Contains::new(expected))
@@ -298,7 +299,7 @@ where
     fn contains_all<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsAll::new(expected))
@@ -308,7 +309,7 @@ where
     fn contains_any_of<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsAnyOf::new(expected))
@@ -318,7 +319,7 @@ where
     fn does_not_contain_any_of<E>(self, unexpected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::DoesNotContainAnyOf::new(unexpected))
@@ -337,7 +338,7 @@ where
     fn does_not_contain<E>(self, not_expected: E) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::DoesNotContain::new(not_expected))
@@ -365,7 +366,7 @@ where
     fn contains_exactly_in_any_order<E>(self, expected: impl AsRef<[E]>) -> Self
     where
         C::Item: PartialEq<E::View>,
-        E: BorrowFor<C::Item>,
+        E: ExpectedOperand<C::Item>,
         R: ValueRenderer<C::Item> + ValueRenderer<E::View>,
     {
         self.matches(value::ContainsExactlyInAnyOrder::new(expected))
