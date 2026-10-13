@@ -114,7 +114,7 @@ pub use reqwest::response::{ReqwestResponseAssertions, ReqwestResponseExtractAss
 #[cfg(feature = "rootcause")]
 pub use rootcause::report::{
     RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
-    RootcauseReportAssertions,
+    RootcauseReportAssertions, RootcauseTypedReportAssertions,
 };
 pub use set::{SetAssertions, SetLookup};
 #[cfg(feature = "thirtyfour")]

@@ -8,7 +8,7 @@ use rootcause::markers::Dynamic;
 
 use crate::{
     AssertThat, Mode,
-    expectation::{AssertionContext, Expectation},
+    expectation::{AssertionContext, Evidence, Expectation, composite_items, field::field, passed},
     failure::{FailureBuilder, FailureKind},
     mode::Panic,
     renderer::{DebugRenderer, ValueRenderer},
@@ -81,6 +81,73 @@ impl<E> Default for HasCurrentContextType<E> {
 
 type_selection_traits!(HasCurrentContextType);
 
+/// Checks that a report's current context does not have a specific concrete type.
+///
+/// This is the negation of [`HasCurrentContextType`], with diagnostics that name the unexpected
+/// type.
+pub struct DoesNotHaveCurrentContextType<E>(core::marker::PhantomData<fn() -> E>);
+
+impl<E> DoesNotHaveCurrentContextType<E> {
+    /// Expects the current context not to have type `E`.
+    #[must_use]
+    pub const fn new() -> Self {
+        Self(core::marker::PhantomData)
+    }
+}
+
+impl<E> Default for DoesNotHaveCurrentContextType<E> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+type_selection_traits!(DoesNotHaveCurrentContextType);
+
+/// Applies a matcher to the current context of a typed report or report reference, locating its
+/// evidence at `.current_context()`.
+///
+/// Construct it with [`current_context`]. Use it where a matcher is expected, for example to check
+/// every report of a collection:
+///
+/// ```
+/// use assertr::{matchers::{each, eq, report::current_context}, prelude::*};
+/// use rootcause::prelude::*;
+///
+/// #[derive(Debug, PartialEq)]
+/// enum StoreError {
+///     NotFound,
+/// }
+///
+/// impl core::fmt::Display for StoreError {
+///     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+///         f.write_str("not found")
+///     }
+/// }
+///
+/// let reports = [report!(StoreError::NotFound), report!(StoreError::NotFound)];
+/// assert_that!(reports).matches(each(current_context(eq(StoreError::NotFound))));
+/// ```
+///
+/// A dynamic report has no statically known context type. Check it with
+/// [`RootcauseDynamicReportAssertions::has_current_context_satisfying`] instead.
+#[derive(Debug, Clone)]
+pub struct CurrentContext<M>(M);
+
+impl<M> CurrentContext<M> {
+    /// Applies `matcher` to the current context.
+    #[must_use]
+    pub const fn new(matcher: M) -> Self {
+        Self(matcher)
+    }
+}
+
+/// Matches the current context of a typed report against `matcher`. This is a convenience
+/// constructor for [`CurrentContext::new`].
+#[must_use]
+pub const fn current_context<M>(matcher: M) -> CurrentContext<M> {
+    CurrentContext::new(matcher)
+}
+
 /// Downcasts the current context once and returns its borrowed value.
 pub struct HasCurrentContext<E>(core::marker::PhantomData<fn() -> E>);
 
@@ -116,6 +183,16 @@ pub trait RootcauseReportAssertions<R = DebugRenderer> {
 
     /// Asserts that the report's current context has type `E`.
     fn has_current_context_type<E: 'static>(self) -> Self;
+
+    /// Asserts that the report's current context does not have type `E`.
+    ///
+    /// ```
+    /// use assertr::prelude::*;
+    /// use rootcause::prelude::*;
+    ///
+    /// assert_that!(report!("timed out")).does_not_have_current_context_type::<u32>();
+    /// ```
+    fn does_not_have_current_context_type<E: 'static>(self) -> Self;
 
     /// Asserts that the rootcause-formatted `Display` representation of the current context equals
     /// `expected`.
@@ -163,6 +240,60 @@ pub trait RootcauseDynamicReportExtractAssertions<'t, R = DebugRenderer> {
     where
         R: Clone;
 }
+
+/// Assertions over the statically typed current context of a typed report or report reference,
+/// such as a `Report<MyError>`.
+///
+/// The context type is known at compile time, so these methods cannot fail on their own. They work
+/// in every mode. Dynamic reports offer the same names with an explicit context type through
+/// [`RootcauseDynamicReportAssertions`] and [`RootcauseDynamicReportExtractAssertions`].
+///
+/// ```
+/// use assertr::prelude::*;
+/// use rootcause::prelude::*;
+///
+/// #[derive(Debug, PartialEq)]
+/// enum StoreError {
+///     NotFound { id: u32 },
+/// }
+///
+/// impl core::fmt::Display for StoreError {
+///     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+///         f.write_str("not found")
+///     }
+/// }
+///
+/// fn load(id: u32) -> Result<String, Report<StoreError>> {
+///     Err(report!(StoreError::NotFound { id }))
+/// }
+///
+/// assert_that!(load(7))
+///     .err()
+///     .current_context()
+///     .is_equal_to(StoreError::NotFound { id: 7 });
+/// ```
+#[allow(clippy::return_self_not_must_use)]
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait RootcauseTypedReportAssertions<'t, C, M: Mode, R = DebugRenderer> {
+    /// Runs additional assertions on the report's current context.
+    ///
+    /// The closure receives an `AssertThat<C>` borrowing the current context. Like
+    /// [`AssertThat::satisfies`], failures of the callback are located at this call.
+    fn has_current_context_satisfying<A>(self, assertions: A) -> Self
+    where
+        A: for<'a> FnOnce(AssertThat<'a, C, M, R>),
+        R: Clone;
+
+    /// Returns an assertion borrowing the report's current context.
+    ///
+    /// Failures of the returned chain propagate to this chain, like [`AssertThat::derive`].
+    fn current_context(&'t self) -> AssertThat<'t, C, M, R>
+    where
+        R: Clone;
+}
+
+/// The path segment locating evidence of a [`CurrentContext`] matcher.
+const CURRENT_CONTEXT: &str = "current_context()";
 
 /// Implements the expectations and assertion traits for one report subject.
 ///
@@ -406,6 +537,79 @@ macro_rules! report_impls {
             }
         }
 
+        impl<$($lt,)? C: ?Sized, O, T, R, E> Expectation<rootcause::$report<$($lt,)? C, O, T>, R>
+            for DoesNotHaveCurrentContextType<E>
+        where
+            E: 'static,
+        {
+            type Success<'a>
+                = ()
+            where
+                Self: 'a,
+                rootcause::$report<$($lt,)? C, O, T>: 'a;
+            type Rejection<'a>
+                = ()
+            where
+                Self: 'a,
+                rootcause::$report<$($lt,)? C, O, T>: 'a;
+
+            fn evaluate<'a>(
+                &'a self,
+                actual: &'a rootcause::$report<$($lt,)? C, O, T>,
+                _context: &AssertionContext<'_, R>,
+            ) -> Result<(), ()> {
+                passed(actual.current_context_type_id() != TypeId::of::<E>())
+            }
+
+            const KIND: FailureKind = FailureKind::Variant;
+
+            fn explain<'a>(
+                &'a self,
+                rejected: Option<(&'a rootcause::$report<$($lt,)? C, O, T>, ())>,
+                failure: FailureBuilder,
+                _context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder {
+                let relation = match rejected {
+                    None => "does not have the current context type",
+                    Some(_) => "has the unexpected current context type",
+                };
+                failure.relation(relation).unexpected(type_name::<E>())
+            }
+        }
+
+        impl<$($lt,)? C, O, T, R, Mt> Expectation<rootcause::$report<$($lt,)? C, O, T>, R>
+            for CurrentContext<Mt>
+        where
+            Mt: Expectation<C, R>,
+        {
+            composite_items!(rootcause::$report<$($lt,)? C, O, T>);
+
+            fn evaluate(
+                &self,
+                actual: &rootcause::$report<$($lt,)? C, O, T>,
+                context: &AssertionContext<'_, R>,
+            ) -> Result<(), Evidence> {
+                field(CURRENT_CONTEXT, |report: &rootcause::$report<$($lt,)? C, O, T>| {
+                    report.current_context()
+                }, &self.0)
+                .evaluate(actual, context)
+            }
+
+            const KIND: FailureKind = FailureKind::Matching;
+
+            fn explain(
+                &self,
+                rejected: Option<(&rootcause::$report<$($lt,)? C, O, T>, Evidence)>,
+                failure: FailureBuilder,
+                context: &AssertionContext<'_, R>,
+            ) -> FailureBuilder {
+                field(CURRENT_CONTEXT, |report: &rootcause::$report<$($lt,)? C, O, T>| {
+                    report.current_context()
+                }, &self.0)
+                .explain(rejected, failure, context)
+            }
+        }
+
         impl<$($lt,)? O, T, R, E> Expectation<rootcause::$report<$($lt,)? Dynamic, O, T>, R>
             for HasCurrentContext<E>
         where
@@ -469,6 +673,11 @@ macro_rules! report_impls {
             }
 
             #[track_caller]
+            fn does_not_have_current_context_type<E: 'static>(self) -> Self {
+                self.matches(DoesNotHaveCurrentContextType::<E>::new())
+            }
+
+            #[track_caller]
             fn has_current_context_display_value(self, expected: impl Display) -> Self
             where
                 R: ValueRenderer<str>,
@@ -499,6 +708,26 @@ macro_rules! report_impls {
                     assertions(self.derive(|_| value));
                 }
                 self
+            }
+        }
+
+        impl<'t, $($lt,)? C, O, T, M: Mode, R> RootcauseTypedReportAssertions<'t, C, M, R>
+            for AssertThat<'t, rootcause::$report<$($lt,)? C, O, T>, M, R>
+        {
+            #[track_caller]
+            fn has_current_context_satisfying<A>(self, assertions: A) -> Self
+            where
+                A: for<'a> FnOnce(AssertThat<'a, C, M, R>),
+                R: Clone,
+            {
+                self.satisfies(|report| report.current_context(), assertions)
+            }
+
+            fn current_context(&'t self) -> AssertThat<'t, C, M, R>
+            where
+                R: Clone,
+            {
+                self.derive(|report| report.current_context())
             }
         }
 
@@ -608,9 +837,20 @@ mod tests {
             let report = report!("root");
             report
                 .must()
+                .not_have_current_context_type::<u32>()
                 .have_current_context_satisfying::<&'static str, _>(|context| {
                     context.is_equal_to("root");
                 });
+
+            let report = report!(TestError("root"));
+            report.must().have_current_context_satisfying(|context| {
+                context.satisfies(
+                    |it| &it.0,
+                    |message| {
+                        message.is_equal_to("root");
+                    },
+                );
+            });
         }
     }
 
@@ -623,7 +863,7 @@ mod tests {
             prelude::*,
             test_support::{
                 CustomValueRenderer, NoRenderer, RedactingRenderer, assert_custom_value,
-                assert_redacted,
+                assert_redacted, assert_trait_impl,
             },
         };
 
@@ -641,6 +881,31 @@ mod tests {
             assert_dynamic_report(&assert_that!(report).with_renderer(NoRenderer));
             let report_ref = report.as_ref();
             assert_dynamic_report(&assert_that!(report_ref).with_renderer(NoRenderer));
+
+            assert_trait_impl!(
+                AssertThat<'static, Report<TestError>, Capture, NoRenderer>
+                    => RootcauseReportAssertions<NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Report<TestError>, Capture, NoRenderer>
+                    => RootcauseTypedReportAssertions<'static, TestError, Capture, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, rootcause::ReportRef<'static, TestError>, Panic, NoRenderer>
+                    => RootcauseTypedReportAssertions<'static, TestError, Panic, NoRenderer>
+            );
+        }
+
+        #[test]
+        fn current_context_matcher_needs_no_renderer_of_its_own() {
+            fn assert_expectation<S, E: Expectation<S, NoRenderer>>(_: &E) {}
+
+            let matcher = matchers::report::current_context(matchers::anything());
+            assert_expectation::<Report<TestError>, _>(&matcher);
+            assert_expectation::<rootcause::ReportRef<'static, TestError>, _>(&matcher);
+            let negated = matchers::report::DoesNotHaveCurrentContextType::<u32>::new();
+            assert_expectation::<Report<Dynamic>, _>(&negated);
+            assert_expectation::<Report<TestError>, _>(&negated);
         }
 
         #[test]
@@ -798,6 +1063,53 @@ mod tests {
         }
     }
 
+    mod does_not_have_current_context_type {
+        use indoc::formatdoc;
+        use rootcause::prelude::*;
+
+        use super::TestError;
+        use crate::prelude::*;
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report),
+                does_not_have_current_context_type::<TestError>()
+            );
+            assert_caller_location!(
+                assert_that!(report.as_ref()),
+                does_not_have_current_context_type::<TestError>()
+            );
+        }
+
+        #[test]
+        fn succeeds_when_type_differs() {
+            assert_that!(report!(TestError("root"))).does_not_have_current_context_type::<String>();
+            assert_that!(report!("root")).does_not_have_current_context_type::<TestError>();
+        }
+
+        #[test]
+        fn panics_when_type_matches() {
+            assert_that!(|| {
+                assert_that!(report!(TestError("root")))
+                    .with_location(false)
+                    .does_not_have_current_context_type::<TestError>();
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `report!(TestError("root"))`
+
+                has the unexpected current context type
+
+                Unexpected: {unexpected}
+                -------- assertr --------
+            "#, unexpected = core::any::type_name::<TestError>()});
+        }
+    }
+
     mod has_current_context_display_value {
         use indoc::formatdoc;
         use rootcause::prelude::*;
@@ -931,6 +1243,35 @@ mod tests {
         }
 
         #[test]
+        fn typed_reports_need_no_context_type() {
+            let report = report!(TestError("root"));
+            assert_that!(report.as_ref()).has_current_context_satisfying(|context| {
+                context.satisfies(
+                    |it| &it.0,
+                    |message| {
+                        message.is_equal_to("root");
+                    },
+                );
+            });
+        }
+
+        #[test]
+        fn typed_callback_failures_are_located_at_the_call() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report),
+                has_current_context_satisfying(|context| {
+                    context.satisfies(
+                        |it| &it.0,
+                        |message| {
+                            message.is_equal_to("other");
+                        },
+                    );
+                })
+            );
+        }
+
+        #[test]
         fn captures_failures_from_callback_assertions_in_capture_mode() {
             let failures = assert_that!(report!("root"))
                 .with_location(false)
@@ -977,6 +1318,43 @@ mod tests {
         }
 
         #[test]
+        fn typed_reports_continue_with_their_context_in_every_mode() {
+            let report = report!(TestError("root"));
+            assert_that!(report).current_context().satisfies(
+                |it| &it.0,
+                |message| {
+                    message.is_equal_to("root");
+                },
+            );
+            let failures = assert_that!(report.as_ref())
+                .with_location(false)
+                .capture(|it| {
+                    it.current_context().satisfies(
+                        |it| &it.0,
+                        |message| {
+                            message.is_equal_to("other");
+                        },
+                    );
+                    it
+                });
+            assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn typed_failures_are_located_at_the_continued_assertion() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report).current_context(),
+                satisfies(
+                    |it| &it.0,
+                    |message| {
+                        message.is_equal_to("other");
+                    }
+                )
+            );
+        }
+
+        #[test]
         fn panics_when_type_does_not_match() {
             assert_that!(|| {
                 assert_that!(report!("root"))
@@ -988,6 +1366,66 @@ mod tests {
             // `has_current_context_type` pins the exact report of this shared explanation.
             .contains("Actual: &str")
             .contains("is not the expected current context type");
+        }
+    }
+    mod current_context_matcher {
+        use indoc::formatdoc;
+        use rootcause::prelude::*;
+
+        use super::TestError;
+        use crate::{
+            matchers::{each, predicate, report::current_context},
+            prelude::*,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let report = report!(TestError("root"));
+            assert_caller_location!(
+                assert_that!(report),
+                matches(current_context(predicate(|it: &TestError| it.0 == "other")))
+            );
+        }
+
+        #[test]
+        fn matches_typed_reports_and_report_refs() {
+            let reports = [report!(TestError("a")), report!(TestError("b"))];
+            assert_that!(reports).matches(each(current_context(predicate(|it: &TestError| {
+                !it.0.is_empty()
+            }))));
+            assert_that!(reports[0].as_ref())
+                .matches(current_context(predicate(|it: &TestError| it.0 == "a")));
+        }
+
+        #[test]
+        fn locates_evidence_at_the_current_context() {
+            assert_that!(|| {
+                assert_that!(report!(TestError("root")))
+                    .with_location(false)
+                    .matches(current_context(
+                        predicate(|it: &TestError| it.0 == "other").described_as("is other"),
+                    ));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `report!(TestError("root"))`
+
+                does not match
+
+                Nested failures:
+                  - At .current_context():
+                    Actual: TestError(
+                        "root",
+                    )
+
+                    does not satisfy the constraint
+
+                    Constraint:
+                        is other
+                -------- assertr --------
+            "#});
         }
     }
 }

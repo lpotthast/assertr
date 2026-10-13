@@ -450,8 +450,9 @@ pub mod response {
 pub mod report {
     #[doc(inline)]
     pub use crate::assertions::rootcause::report::{
-        HasAttachmentCount, HasChildCount, HasCurrentContext, HasCurrentContextDebugString,
-        HasCurrentContextDisplayValue, HasCurrentContextType,
+        CurrentContext, DoesNotHaveCurrentContextType, HasAttachmentCount, HasChildCount,
+        HasCurrentContext, HasCurrentContextDebugString, HasCurrentContextDisplayValue,
+        HasCurrentContextType, current_context,
     };
 }
 

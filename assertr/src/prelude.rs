@@ -30,7 +30,7 @@ pub use crate::assertions::{ReqwestResponseAssertions, ReqwestResponseExtractAss
 #[cfg(feature = "rootcause")]
 pub use crate::assertions::{
     RootcauseDynamicReportAssertions, RootcauseDynamicReportExtractAssertions,
-    RootcauseReportAssertions,
+    RootcauseReportAssertions, RootcauseTypedReportAssertions,
 };
 #[cfg(feature = "jiff")]
 pub use crate::assertions::{SignedDurationAssertions, SpanAssertions, ZonedAssertions};

@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   collection's type guarantees its iteration order. Hash sets and heaps remain order-free.
 - `StableEntryOrder` declares that a map's type guarantees its entry order. `BTreeMap` implements it, which makes its
   `keys()` and `values()` views `StableOrder`, so `assert_that!(map).keys().contains_exactly(["a", "b"])` works.
+- Typed rootcause reports such as `Report<MyError>` continue with their context through `current_context()`, which needs
+  no type parameter and works in every mode, and `has_current_context_satisfying(..)`. The
+  `matchers::report::current_context(..)` matcher applies a matcher to the context, for example inside `each(..)`.
+- `does_not_have_current_context_type::<E>()` asserts that a report's current context has a different type.
 
 ## [0.8.0] - 2026-10-11
 

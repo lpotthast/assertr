@@ -93,7 +93,9 @@ Regression: [`returned_context_collects_projections_and_renderer_changes_once`](
 | JSON/TOML conversion                                   | Serialize the borrowed subject once, map to owned `Result<String, Error>` in either mode. Errors remain `Err` for later checks. This transformation counts no assertion. |
 
 For example, program existence retains its subject, while resolved-path extraction promises a `PathBuf`. Type checks and
-extractions on erased boxes, panic payloads, and rootcause contexts use the same distinction. Owned payloads can
+extractions on erased boxes, panic payloads, and dynamic rootcause contexts use the same distinction. A typed rootcause
+report always has a context of its declared type, so its `current_context` projection cannot fail and works in every
+mode. Owned payloads can
 transfer
 ownership. Borrowed payloads remain borrowed. Message extraction with `message` always yields an owned `String`: it
 moves an owned `String` payload and copies a `&str` payload or a borrowed message.
