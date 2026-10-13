@@ -1,24 +1,24 @@
-error[E0277]: the collection has no stable, meaningful element order
- --> tests/partial/28-reject-missing-stable-order.rs:5:65
+error[E0277]: the collection does not guarantee its element order
+ --> tests/partial/28-reject-missing-stable-order.rs:6:64
   |
-5 |     assert_that!(std::collections::BTreeSet::from([1])).matches(elements_are![eq(1)]);
-  |                                                         ------- ^^^^^^^^^^^^^^^^^^^^ no stable-order capability
-  |                                                         |
-  |                                                         required by a bound introduced by this call
+6 |     assert_that!(std::collections::HashSet::from([1])).matches(elements_are![eq(1)]);
+  |                                                        ------- ^^^^^^^^^^^^^^^^^^^^ no stable-order capability
+  |                                                        |
+  |                                                        required by a bound introduced by this call
   |
-  = help: the trait `StableOrder` is not implemented for `BTreeSet<{integer}>`
+  = help: the trait `StableOrder` is not implemented for `HashSet<{integer}>`
   = note: order-sensitive assertions require `StableOrder`; use an order-free assertion such as `contains_exactly_in_any_order` instead
   = help: the following other types implement trait `StableOrder`:
             &C
             &mut C
             AssertionFailures
+            BTreeSet<T>
             Box<C>
             LinkedList<T>
-            Vec<T>
-            VecDeque<T>
-            [T; N]
-            [T]
-  = note: required for `ElementsAre<assertr::__private::Cons<EqualTo<{integer}>, assertr::__private::Nil>>` to implement `Expectation<BTreeSet<{integer}>>`
+            MapKeys<'_, Mp>
+            MapValues<'_, Mp>
+          and $N others
+  = note: required for `ElementsAre<assertr::__private::Cons<EqualTo<{integer}>, assertr::__private::Nil>>` to implement `Expectation<HashSet<{integer}>>`
 note: required by a bound in `assertr::assert_that::execution::<impl AssertThat<'_, T, M, R>>::matches`
  --> $WORKSPACE/assertr/src/assert_that/execution.rs
   |

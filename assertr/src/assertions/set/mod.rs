@@ -12,7 +12,10 @@ pub use imp::{IsDisjointFrom, IsSubsetOf, IsSupersetOf};
 
 #[cfg(feature = "std")]
 use crate::renderer::RenderingOrder;
-use crate::{assertions::collection::Collection, renderer::CollectionPresentation};
+use crate::{
+    assertions::collection::{Collection, StableOrder},
+    renderer::CollectionPresentation,
+};
 
 /// Native membership lookup for a collection of unique elements, the capability behind the set
 /// relations.
@@ -77,11 +80,12 @@ use crate::{assertions::collection::Collection, renderer::CollectionPresentation
 /// `contains_exactly_in_any_order` come from [`Collection`] and compare elements with
 /// `PartialEq`, even on sets.
 ///
-/// A set never implements [`StableOrder`](crate::assertions::StableOrder), even when its
-/// iteration happens to be deterministic, so order-sensitive assertions such as
-/// `contains_exactly` do not compile for it. Choose
-/// [`CollectionPresentation::set`] for set brackets in diagnostics, and add
-/// `with_order(RenderingOrder::SortByRenderedText)` when iteration order is arbitrary.
+/// Order-sensitive assertions such as `contains_exactly` additionally require
+/// [`StableOrder`](crate::assertions::StableOrder), which a set implements only when its type
+/// guarantees its iteration order. A `BTreeSet` does, because it always yields its elements in
+/// ascending order. A `HashSet` does not. Choose [`CollectionPresentation::set`] for set brackets
+/// in diagnostics, and add `with_order(RenderingOrder::SortByRenderedText)` when iteration order
+/// is arbitrary.
 #[diagnostic::on_unimplemented(
     message = "the collection has no native set membership lookup",
     label = "no set-lookup capability",
@@ -101,6 +105,10 @@ impl<T> Collection for BTreeSet<T> {
         self.iter()
     }
 }
+
+/// A `BTreeSet` always yields its elements in ascending order, so their positions are
+/// meaningful: `first` is the minimum, and `contains_exactly` expects the elements sorted.
+impl<T> StableOrder for BTreeSet<T> {}
 
 impl<T: Ord> SetLookup for BTreeSet<T> {
     fn contains_element(&self, element: &T) -> bool {
@@ -226,6 +234,56 @@ mod tests {
             .is_subset_of(BTreeSet::from([1, 2, 3, 4]))
             .is_superset_of(BTreeSet::from([1]))
             .is_disjoint_from(BTreeSet::from([9]));
+    }
+
+    #[test]
+    fn a_btree_set_gets_order_sensitive_assertions_in_ascending_order() {
+        let set = BTreeSet::from([3, 1, 2]);
+        let it = assert_that!(set)
+            .starts_with([1])
+            .ends_with([3])
+            .contains_contiguous([2, 3])
+            .contains_exactly([1, 2, 3]);
+        it.first().is_equal_to(1);
+        it.last().is_equal_to(3);
+    }
+
+    #[test]
+    fn a_btree_set_reports_the_position_of_an_unsorted_expectation() {
+        assert_that!(|| {
+            assert_that!(BTreeSet::from([1, 2, 3]))
+                .with_location(false)
+                .contains_exactly([1, 3, 2]);
+        })
+        .panics()
+        .message()
+        .is_equal_to(indoc::indoc! {"
+            -------- assertr --------
+            Expression: `BTreeSet::from([1, 2, 3])`
+
+            Actual: BTreeSet {
+                1,
+                2,
+                3,
+            }
+
+            does not contain exactly
+
+            Expected: [
+                1,
+                3,
+                2,
+            ]
+
+            Details:
+              - Only the order of the elements differs.
+            Nested failures:
+              - At [1]:
+                Expected: 3
+
+                  Actual: 2
+            -------- assertr --------
+        "});
     }
 
     #[test]

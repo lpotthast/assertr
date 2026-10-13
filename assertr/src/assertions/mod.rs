@@ -40,6 +40,7 @@
 //! | [`RandomAccess`] | Extraction by position with `at` |
 //! | [`SetLookup`] | Set relations such as `is_subset_of` |
 //! | [`Map`] and [`MapLookup`] | Map assertions such as `contains_key` |
+//! | [`StableEntryOrder`] | Positional assertions on the `keys` and `values` views of a map |
 //! | [`NumericDistance`] | Tolerance checks with `is_close_to` |
 //!
 //! # Assertion traits
@@ -101,7 +102,9 @@ pub use http::header_value::{HttpHeaderValueAssertions, HttpHeaderValueExtractAs
 pub use jiff::{
     signed_duration::SignedDurationAssertions, span::SpanAssertions, zoned::ZonedAssertions,
 };
-pub use map::{Map, MapAssertions, MapKeys, MapLookup, MapProjectionAssertions, MapValues};
+pub use map::{
+    Map, MapAssertions, MapKeys, MapLookup, MapProjectionAssertions, MapValues, StableEntryOrder,
+};
 #[cfg(feature = "num")]
 pub use num::NumAssertions;
 #[cfg(feature = "program")]

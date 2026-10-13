@@ -21,19 +21,20 @@ use crate::{
 
 /// Assertions over the elements of a collection whose order is stable and meaningful.
 ///
-/// This trait is implemented only for [`StableOrder`] subjects. A call on a set reports the missing
-/// capability and recommends `contains_exactly_in_any_order`.
+/// This trait is implemented only for [`StableOrder`] subjects, which include lists and sorted
+/// sets such as `BTreeSet`. Collections that iterate in an unspecified order, such as a `HashSet`,
+/// use the order-free `contains_exactly_in_any_order` instead.
 ///
 /// The restriction is part of the trait implementation, not merely individual method bodies, so a
-/// set cannot satisfy a generic `StableOrderAssertions` bound:
+/// hash set cannot satisfy a generic `StableOrderAssertions` bound:
 ///
 /// ```compile_fail,E0277
-/// use std::collections::BTreeSet;
+/// use std::collections::HashSet;
 /// use assertr::prelude::*;
 ///
 /// fn requires_stable_order<A: StableOrderAssertions<i32, DebugRenderer>>(_assertion: A) {}
 ///
-/// requires_stable_order(assert_that!(BTreeSet::from([1, 2, 3])));
+/// requires_stable_order(assert_that!(HashSet::from([1, 2, 3])));
 /// ```
 ///
 /// Bulk value lists use [repeatable expected data](crate#expected-lists).
@@ -61,12 +62,12 @@ pub trait StableOrderAssertions<T, R = DebugRenderer> {
     ///
     /// Order-free collections cannot use this positional assertion:
     ///
-    /// ```compile_fail,E0277
+    /// ```compile_fail,E0599
     /// use assertr::prelude::*;
-    /// use std::collections::BTreeSet;
+    /// use std::collections::HashSet;
     ///
     /// let values = [1, 2];
-    /// assert_that!(BTreeSet::from([&values[0], &values[1]]))
+    /// assert_that!(HashSet::from([&values[0], &values[1]]))
     ///     .contains_exactly_same_instances([&values[0], &values[1]]);
     /// ```
     fn contains_exactly_same_instances<'e, U: ?Sized + 'e>(
@@ -398,13 +399,13 @@ where
 /// A failed extraction cannot produce an element, so the family is intentionally unavailable in
 /// capture mode.
 ///
-/// Unordered collections do not expose first or last elements:
+/// Collections with an unspecified iteration order do not expose first or last elements:
 ///
 /// ```compile_fail,E0599
 /// use assertr::prelude::*;
-/// use std::collections::BTreeSet;
+/// use std::collections::HashSet;
 ///
-/// assert_that!(BTreeSet::from([1, 2, 3])).first();
+/// assert_that!(HashSet::from([1, 2, 3])).first();
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait StableOrderExtractAssertions<'t, T, R = DebugRenderer> {

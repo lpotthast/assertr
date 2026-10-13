@@ -1,32 +1,32 @@
-//! Projections of a map onto order-free collection views of its keys or values.
+//! Projections of a map onto collection views of its keys or values.
 
 use core::fmt;
 
-use super::{Map, MapLookup};
+use super::{Map, MapLookup, StableEntryOrder};
 use crate::{
     AssertThat, Mode,
-    assertions::{HasLength, SetLookup, collection::Collection},
+    assertions::{HasLength, SetLookup, StableOrder, collection::Collection},
     renderer::{CollectionPresentation, DebugRenderer},
 };
 
-/// An order-free collection view of a map's stored keys, created by
-/// [`MapProjectionAssertions::keys`].
+/// A collection view of a map's stored keys, created by [`MapProjectionAssertions::keys`].
 ///
 /// The view implements [`Collection`], so every order-free collection assertion and matcher
 /// applies to the keys. Keys are unique, so a map with native key lookup also makes the view a
-/// [`SetLookup`] set, which enables set relations such as `is_subset_of`. The view never
-/// implements [`StableOrder`](crate::assertions::StableOrder), even for a `BTreeMap`, because a
-/// map's iteration order does not give its keys meaningful positions. Diagnostics present the keys
-/// as a set in the map's [`RENDERING_ORDER`](Map::RENDERING_ORDER).
+/// [`SetLookup`] set, which enables set relations such as `is_subset_of`. The view implements
+/// [`StableOrder`] when the map implements [`StableEntryOrder`], as a `BTreeMap` does, so
+/// order-sensitive assertions see the keys in the map's guaranteed order. Diagnostics present the
+/// keys as a set in the map's [`RENDERING_ORDER`](Map::RENDERING_ORDER).
 pub struct MapKeys<'m, Mp: ?Sized>(&'m Mp);
 
-/// An order-free collection view of a map's stored values, created by
-/// [`MapProjectionAssertions::values`].
+/// A collection view of a map's stored values, created by [`MapProjectionAssertions::values`].
 ///
 /// The view implements [`Collection`], so every order-free collection assertion and matcher
 /// applies to the values. Values may repeat, and their multiplicity is preserved, so
-/// `contains_exactly_in_any_order` counts duplicates. Diagnostics present the values as a list in
-/// the map's [`RENDERING_ORDER`](Map::RENDERING_ORDER).
+/// `contains_exactly_in_any_order` counts duplicates. The view implements [`StableOrder`] when
+/// the map implements [`StableEntryOrder`], so order-sensitive assertions see the values in the
+/// order of their keys. Diagnostics present the values as a list in the map's
+/// [`RENDERING_ORDER`](Map::RENDERING_ORDER).
 pub struct MapValues<'m, Mp: ?Sized>(&'m Mp);
 
 impl<Mp: Map + ?Sized> fmt::Debug for MapKeys<'_, Mp>
@@ -79,6 +79,10 @@ impl<Mp: Map + ?Sized> Collection for MapValues<'_, Mp> {
     }
 }
 
+impl<Mp: StableEntryOrder + ?Sized> StableOrder for MapKeys<'_, Mp> {}
+
+impl<Mp: StableEntryOrder + ?Sized> StableOrder for MapValues<'_, Mp> {}
+
 /// Membership uses the map's native key lookup, the same equivalence that keeps its keys unique.
 impl<Mp> SetLookup for MapKeys<'_, Mp>
 where
@@ -110,22 +114,36 @@ where
 ///     .contains_exactly_in_any_order([3, 3, 30]);
 /// ```
 ///
-/// Neither view has positions, so order-sensitive assertions do not compile on it:
+/// The views of a map with [`StableEntryOrder`], such as a `BTreeMap`, keep its guaranteed order,
+/// so order-sensitive assertions apply to them:
 ///
-/// ```compile_fail,E0599
+/// ```
 /// use assertr::prelude::*;
 /// use std::collections::BTreeMap;
 ///
-/// assert_that!(BTreeMap::from([("a", 1)])).keys().contains_exactly(["a"]);
+/// let limits = BTreeMap::from([("timeout", 30), ("retries", 3)]);
+/// let it = assert_that!(limits);
+/// it.keys().contains_exactly(["retries", "timeout"]);
+/// it.values().first().is_equal_to(3);
+/// ```
+///
+/// The views of a map with an unspecified iteration order have no positions, so order-sensitive
+/// assertions do not compile on them:
+///
+/// ```compile_fail,E0599
+/// use assertr::prelude::*;
+/// use std::collections::HashMap;
+///
+/// assert_that!(HashMap::from([("a", 1)])).keys().contains_exactly(["a"]);
 /// ```
 #[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
 pub trait MapProjectionAssertions<'t, Mp: ?Sized, M: Mode, R = DebugRenderer> {
-    /// Returns an assertion over an order-free collection view of the map's stored keys.
+    /// Returns an assertion over a collection view of the map's stored keys.
     fn keys(&'t self) -> AssertThat<'t, MapKeys<'t, Mp>, M, R>
     where
         R: Clone;
 
-    /// Returns an assertion over an order-free collection view of the map's stored values.
+    /// Returns an assertion over a collection view of the map's stored values.
     fn values(&'t self) -> AssertThat<'t, MapValues<'t, Mp>, M, R>
     where
         R: Clone;
@@ -187,6 +205,14 @@ mod tests {
                 AssertThat<'static, MapValues<'static, BTreeMap<i32, i32>>, Panic, NoRenderer>
                     => CollectionAssertions<i32, NoRenderer>
             );
+            assert_trait_impl!(
+                AssertThat<'static, MapKeys<'static, BTreeMap<i32, i32>>, Panic, NoRenderer>
+                    => StableOrderAssertions<i32, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, MapValues<'static, BTreeMap<i32, i32>>, Panic, NoRenderer>
+                    => StableOrderAssertions<i32, NoRenderer>
+            );
         }
 
         #[test]
@@ -227,6 +253,14 @@ mod tests {
                 .has_length(2)
                 .is_subset_of(BTreeSet::from(["a", "b", "c"]))
                 .is_disjoint_from(BTreeSet::from(["c"]));
+        }
+
+        #[test]
+        fn supports_order_sensitive_assertions_in_ascending_key_order() {
+            let map = BTreeMap::from([("b", 2), ("a", 1)]);
+            let it = assert_that!(map);
+            it.keys().starts_with(["a"]).contains_exactly(["a", "b"]);
+            it.keys().last().is_equal_to("b");
         }
 
         #[test]
@@ -301,6 +335,14 @@ mod tests {
                 it
             });
             assert_that!(failures).has_length(1);
+        }
+
+        #[test]
+        fn supports_order_sensitive_assertions_in_ascending_key_order() {
+            let map = BTreeMap::from([("b", 1), ("a", 2)]);
+            let it = assert_that!(map);
+            it.values().contains_exactly([2, 1]);
+            it.values().first().is_equal_to(2);
         }
     }
 }

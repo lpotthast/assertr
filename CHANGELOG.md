@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- `BTreeSet` supports order-sensitive assertions such as `contains_exactly`, `starts_with`, `first`, and `last`. It
+  always yields its elements in ascending order, so their positions are meaningful. `StableOrder` now means that a
+  collection's type guarantees its iteration order. Hash sets and heaps remain order-free.
+- `StableEntryOrder` declares that a map's type guarantees its entry order. `BTreeMap` implements it, which makes its
+  `keys()` and `values()` views `StableOrder`, so `assert_that!(map).keys().contains_exactly(["a", "b"])` works.
+
 ## [0.8.0] - 2026-10-11
 
 ### Added

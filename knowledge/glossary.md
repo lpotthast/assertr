@@ -87,12 +87,13 @@ for detailed requirements and exceptions.
 | [Capability](collection-semantics.md#capability-model) | A trait providing the behavior needed by a group of assertions. |
 | [HasLength](collection-semantics.md#capability-model) | Provides the subject's finite length. |
 | [Collection](collection-semantics.md#capability-model) | Allows repeated traversal of references to the same elements in the same order. |
-| [StableOrder](collection-semantics.md#capability-model) | Makes element positions part of a collection's meaning, as in a list. |
+| [StableOrder](collection-semantics.md#capability-model) | Declares that a collection's type guarantees its iteration order, so element positions are meaningful, as in a list or a sorted set. |
 | [RandomAccess](collection-semantics.md#capability-model) | Stable positions with constant-time indexed access. |
 | [SetLookup](collection-semantics.md#capability-model) | Native membership for unique elements, using the same equivalence as the set. |
 | [Map](collection-semantics.md#capability-model) | Allows repeated traversal of the same stored keys and values. |
 | [MapLookup](collection-semantics.md#keyed-maps) | Native borrowed-key lookup capability. |
-| [Map views](collection-semantics.md#key-and-value-views) | `MapKeys` and `MapValues`: order-free collection views of a map's keys or values, created by projection. |
+| [StableEntryOrder](collection-semantics.md#capability-model) | Declares that a map's type guarantees its entry order, which makes its key and value views `StableOrder`. |
+| [Map views](collection-semantics.md#key-and-value-views) | `MapKeys` and `MapValues`: collection views of a map's keys or values, created by projection. Positional only for a `StableEntryOrder` map. |
 | [Reference identity](reference-identity.md#which-address-is-compared) | Pointer equality of the subject or selected `Borrow` target, including pointer metadata. |
 
 ## Diagnostic values
