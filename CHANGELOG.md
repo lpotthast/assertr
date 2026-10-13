@@ -18,6 +18,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   no type parameter and works in every mode, and `has_current_context_satisfying(..)`. The
   `matchers::report::current_context(..)` matcher applies a matcher to the context, for example inside `each(..)`.
 - `does_not_have_current_context_type::<E>()` asserts that a report's current context has a different type.
+- `matchers::ne(..)` complements `eq(..)`. `matchers::string` gains the constructors `contains`, `does_not_contain`,
+  `starts_with`, `does_not_start_with`, `ends_with`, `does_not_end_with`, and `equal_to_ignoring_ascii_case`, so a
+  `partial!` field can check a string without a `satisfying` closure, whose `contains` is ambiguous between strings and
+  collections.
 
 ## [0.8.0] - 2026-10-11
 

@@ -16,8 +16,9 @@
 //!
 //! Unit values such as [`IsSome`] need no arguments. Others take their expected values in
 //! `Type::new(..)`, and short functions build the same types: `ge(18)` is
-//! [`GreaterOrEqual::new(18)`](GreaterOrEqual::new). Pass `&matcher` to use one definition several
-//! times:
+//! [`GreaterOrEqual::new(18)`](GreaterOrEqual::new), and `string::contains("x")` is
+//! [`string::Contains::new("x")`](string::Contains::new). Pass `&matcher` to use one definition
+//! several times:
 //!
 //! ```rust
 //! use assertr::{matchers::{all_of, HasLengthOf, IsSome, string}, prelude::*};
@@ -53,7 +54,7 @@
 //!
 //! | Subject or check | Matchers |
 //! |---|---|
-//! | Equality and ordering | [`eq`], [`EqualTo`], [`NotEqualTo`], [`one_of`], [`lt`], [`le`], [`gt`], [`ge`], and their types |
+//! | Equality and ordering | [`eq`], [`ne`], [`one_of`], [`lt`], [`le`], [`gt`], [`ge`], and their types such as [`EqualTo`] and [`NotEqualTo`] |
 //! | Tolerance | [`close_to`], [`IsCloseTo`] for numbers and durations implementing [`NumericDistance`](crate::assertions::NumericDistance) |
 //! | Booleans, variants, and types | [`IsTrue`], [`IsFalse`], [`IsSome`], [`IsNone`], [`IsOk`], [`IsErr`], [`IsReady`], [`IsPending`], [`IsOfType`], [`HasPanicMessage`] |
 //! | Length, formatting, and identity | [`HasLengthOf`], [`IsEmpty`], [`IsNotEmpty`], [`HasDebugString`], [`HasDebugValue`], [`HasDisplayValue`], [`IsSameInstanceAs`], [`IsNotSameInstanceAs`] |
@@ -262,7 +263,7 @@ pub use crate::{
             elements_are, elements_are_in_any_order, ends_with_elements, starts_with_elements,
         },
         core::{
-            partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, one_of},
+            partial_eq::{EqualTo, IsOneOf, NotEqualTo, eq, ne, one_of},
             partial_ord::{GreaterOrEqual, GreaterThan, LessOrEqual, LessThan, ge, gt, le, lt},
         },
         distance::{CloseToRejection, IsCloseTo, close_to},
@@ -288,11 +289,33 @@ pub mod character {
 }
 
 /// String contents, prefixes, suffixes, and whitespace expectations.
+///
+/// Short functions such as [`contains`](crate::matchers::string::contains) build the matchers that
+/// take an operand. They know their subject is a string, so they work where a `satisfying` callback
+/// cannot tell a string's `contains` from a collection's, for example in a `partial!` field:
+///
+/// ```rust
+/// # #[cfg(feature = "partial")]
+/// # {
+/// use assertr::{matchers::{all_of, string}, prelude::*};
+///
+/// struct Failure {
+///     message: String,
+/// }
+///
+/// let failure = Failure { message: String::from("boom: config missing") };
+/// assert_that!(failure).matches(partial!(Failure {
+///     message: all_of(matchers![string::starts_with("boom"), string::contains("config")]),
+/// }));
+/// # }
+/// ```
 pub mod string {
     #[doc(inline)]
     pub use crate::assertions::core::string::{
         Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
-        EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith,
+        EqualToIgnoringAsciiCase, IsAsciiBlank, IsBlank, IsNotBlank, StartsWith, contains,
+        does_not_contain, does_not_end_with, does_not_start_with, ends_with,
+        equal_to_ignoring_ascii_case, starts_with,
     };
 }
 

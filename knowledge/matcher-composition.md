@@ -98,6 +98,11 @@ Ordinary assertion callbacks may accept `FnOnce` and retain their method's mode.
 [`AssertThat::satisfies`](assertion-lifecycle.md#projections-and-continuation) projects and continues immediately.
 `satisfying` constructs an expectation for later evaluation.
 
+The callback is type-checked before the matcher meets its subject, so its subject type is still an inference variable
+inside the closure body. Methods offered by several blanket-implemented assertion traits, such as `contains` on
+strings, collections, and iterators, are then ambiguous (`E0034`). Subject namespaces therefore offer lowercase
+constructors such as `string::contains`, whose expectation types fix the subject family without a closure.
+
 ## Searches
 
 `contains_matching`, `contains_value_matching`, `any_of`, and contiguous `elements_are` stop at the first candidate

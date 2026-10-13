@@ -8,8 +8,9 @@ use crate::{
 ///
 /// A property (`pub struct IsBlank;`) checks the view alone. An operand expectation
 /// (`pub struct Contains<E>;`) owns an [`AsRef<str>`] operand and compares both views. `role`
-/// selects whether diagnostics report the operand as the expected or unexpected value. Rejections
-/// retain the views, and failures render the subject's string view.
+/// selects whether diagnostics report the operand as the expected or unexpected value, and
+/// `constructor` names its lowercase convenience function. Rejections retain the views, and
+/// failures render the subject's string view.
 macro_rules! str_expectation {
     (
         $(#[$attr:meta])*
@@ -67,10 +68,20 @@ macro_rules! str_expectation {
         check |$actual:ident, $operand:ident| $check:expr;
         relations $relation:literal, $negated:literal;
         role $role:ident;
+        $(#[$constructor_attr:meta])*
+        constructor $constructor:ident;
     ) => {
         $(#[$attr])*
         #[derive(Debug, Clone)]
         pub struct $name<E>(E);
+
+        $(#[$constructor_attr])*
+        #[doc = ""]
+        #[doc = concat!("This is a convenience constructor for [`", stringify!($name), "::new`].")]
+        #[must_use]
+        pub const fn $constructor<E>($role: E) -> $name<E> {
+            $name::new($role)
+        }
 
         impl<E> $name<E> {
             #[doc = concat!(
@@ -159,6 +170,8 @@ str_expectation! {
     check |actual, expected| actual.eq_ignore_ascii_case(expected);
     relations "is equal to ignoring ASCII case", "is not equal to ignoring ASCII case";
     role expected;
+    /// Matches strings equal to `expected` under ASCII case folding.
+    constructor equal_to_ignoring_ascii_case;
 }
 
 str_expectation! {
@@ -168,6 +181,8 @@ str_expectation! {
     check |actual, expected| actual.contains(expected);
     relations "contains", "does not contain";
     role expected;
+    /// Matches strings containing the substring `expected`.
+    constructor contains;
 }
 
 str_expectation! {
@@ -177,6 +192,8 @@ str_expectation! {
     check |actual, unexpected| !actual.contains(unexpected);
     relations "does not contain", "contains";
     role unexpected;
+    /// Matches strings that do not contain the substring `unexpected`.
+    constructor does_not_contain;
 }
 
 str_expectation! {
@@ -198,6 +215,8 @@ str_expectation! {
     check |actual, expected| actual.starts_with(expected);
     relations "starts with", "does not start with";
     role expected;
+    /// Matches strings starting with `expected`.
+    constructor starts_with;
 }
 
 str_expectation! {
@@ -207,6 +226,8 @@ str_expectation! {
     check |actual, unexpected| !actual.starts_with(unexpected);
     relations "does not start with", "starts with";
     role unexpected;
+    /// Matches strings that do not start with `unexpected`.
+    constructor does_not_start_with;
 }
 
 str_expectation! {
@@ -216,6 +237,8 @@ str_expectation! {
     check |actual, expected| actual.ends_with(expected);
     relations "ends with", "does not end with";
     role expected;
+    /// Matches strings ending with `expected`.
+    constructor ends_with;
 }
 
 str_expectation! {
@@ -225,6 +248,8 @@ str_expectation! {
     check |actual, unexpected| !actual.ends_with(unexpected);
     relations "does not end with", "ends with";
     role unexpected;
+    /// Matches strings that do not end with `unexpected`.
+    constructor does_not_end_with;
 }
 
 /// String-specific assertions.
@@ -387,6 +412,59 @@ mod tests {
             "foo bar baz".must().not_start_with("oo");
             "foo bar baz".must().end_with("r baz");
             "foo bar baz".must().not_end_with("y");
+        }
+    }
+
+    mod constructors {
+        use crate::{
+            assertions::core::string::{
+                Contains, DoesNotContain, DoesNotEndWith, DoesNotStartWith, EndsWith,
+                EqualToIgnoringAsciiCase, StartsWith,
+            },
+            matchers::{all_of, string},
+            prelude::*,
+        };
+
+        #[test]
+        fn build_the_named_matchers() {
+            let _: EqualToIgnoringAsciiCase<&str> = string::equal_to_ignoring_ascii_case("a");
+            let _: Contains<&str> = string::contains("a");
+            let _: DoesNotContain<&str> = string::does_not_contain("a");
+            let _: StartsWith<&str> = string::starts_with("a");
+            let _: DoesNotStartWith<&str> = string::does_not_start_with("a");
+            let _: EndsWith<&str> = string::ends_with("a");
+            let _: DoesNotEndWith<&str> = string::does_not_end_with("a");
+        }
+
+        #[test]
+        fn match_string_subjects() {
+            assert_that!(String::from("Foo bar baz")).matches(all_of(matchers![
+                string::equal_to_ignoring_ascii_case("foo BAR baz"),
+                string::contains("bar"),
+                string::does_not_contain("qux"),
+                string::starts_with("Foo"),
+                string::does_not_start_with("bar"),
+                string::ends_with("baz"),
+                string::does_not_end_with("bar"),
+            ]));
+        }
+
+        #[cfg(feature = "partial")]
+        #[test]
+        fn select_the_string_family_inside_partial_fields() {
+            struct Failure {
+                message: String,
+            }
+
+            let failure = Failure {
+                message: String::from("boom: config missing"),
+            };
+            assert_that!(failure).matches(partial!(Failure {
+                message: all_of(matchers![
+                    string::starts_with("boom"),
+                    string::contains("config")
+                ]),
+            }));
         }
     }
 

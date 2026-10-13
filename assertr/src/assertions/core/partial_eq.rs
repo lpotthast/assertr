@@ -142,6 +142,21 @@ impl<E> NotEqualTo<E> {
     }
 }
 
+/// Matches values not equal to `unexpected` through the actual value's `PartialEq`
+/// implementation.
+///
+/// This is a convenience constructor for [`NotEqualTo::new`].
+///
+/// ```
+/// use assertr::{matchers::ne, prelude::*};
+///
+/// assert_that!([String::from("hello")]).matches(elements_are![ne("bye")]);
+/// ```
+#[must_use]
+pub const fn ne<E>(unexpected: E) -> NotEqualTo<E> {
+    NotEqualTo::new(unexpected)
+}
+
 /// Matches a subject equal to one of the listed values: an array, slice, or vector whose
 /// elements are compared like [`eq`]'s operand, so `&str` candidates match a `String` subject.
 ///
@@ -573,6 +588,45 @@ mod tests {
                 }
             }
             assert_that!(Unusual).is_not_equal_to(&Unusual);
+        }
+    }
+
+    mod ne {
+        use indoc::formatdoc;
+
+        use crate::{
+            matchers::{each, ne},
+            prelude::*,
+        };
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(assert_that!(String::from("a")), matches(ne("a")));
+        }
+
+        #[test]
+        fn matches_unequal_values_with_borrowed_operands() {
+            assert_that!([String::from("a"), String::from("b")]).matches(each(ne("c")));
+        }
+
+        #[test]
+        fn reports_the_unexpectedly_equal_value() {
+            assert_that!(|| {
+                assert_that!(3).with_location(false).matches(ne(3));
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {"
+                -------- assertr --------
+                Expression: `3`
+
+                Actual: 3
+
+                is equal to
+
+                Unexpected: 3
+                -------- assertr --------
+            "});
         }
     }
 
