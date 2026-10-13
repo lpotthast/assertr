@@ -18,8 +18,8 @@ failure explains what was found and what was expected.
 use assertr::prelude::*;
 
 assert_that!("hello, world!")
-    .starts_with("hello")
-    .ends_with("!");
+.starts_with("hello")
+.ends_with("!");
 
 let numbers = vec![1, 2, 3];
 assert_that!(numbers).has_length(3).contains(2);
@@ -49,7 +49,7 @@ assertr works in `std` and `no_std` builds.
 
 ```toml
 [dev-dependencies]
-assertr = "0.8.0"
+assertr = "0.9.0"
 ```
 
 Everything beyond `std` and `num` is opt-in:
@@ -102,9 +102,9 @@ use assertr::prelude::*;
 assert_that!(Some(42)).some().is_greater_than(40);
 assert_that!("42".parse::<u32>()).ok().is_equal_to(42);
 assert_that!(|| panic!("boom"))
-    .panics()
-    .message()
-    .is_equal_to("boom");
+.panics()
+.message()
+.is_equal_to("boom");
 ```
 
 Expected values can be owned or borrowed, and string literals compare with `String` subjects.
@@ -114,7 +114,7 @@ Pass a reference to reuse an expected value without cloning it:
 use assertr::prelude::*;
 
 let expected = String::from("Ada");
-assert_that!(String::from("Ada")).is_equal_to(&expected);
+assert_that!(String::from("Ada")).is_equal_to( & expected);
 assert_that!(vec![String::from("Ada")]).contains_exactly(["Ada"]);
 ```
 
@@ -136,8 +136,8 @@ struct User {
 
 let user = User { name: "Ada".into(), age: 36 };
 let user = assert_that!(user);
-user.derive(|u| &u.name).starts_with("A");
-user.derive(|u| &u.age).is_greater_or_equal_to(18);
+user.derive( | u| & u.name).starts_with("A");
+user.derive( | u| & u.age).is_greater_or_equal_to(18);
 ```
 
 With the `partial` feature, `partial!` describes the fields that matter in one expression and
@@ -184,8 +184,8 @@ once and apply it to a whole value, to the elements of a collection, or to a fie
 use assertr::{matchers::{all_of, string, HasLengthOf}, prelude::*};
 
 let short_name = all_of(matchers![string::IsNotBlank, HasLengthOf::new(3)]);
-assert_that!("Ada").matches(&short_name);
-assert_that!(["", "Ada", "Grace"]).contains_matching(&short_name);
+assert_that!("Ada").matches( & short_name);
+assert_that!(["", "Ada", "Grace"]).contains_matching( & short_name);
 ```
 
 The [matcher catalog](https://docs.rs/assertr/latest/assertr/matchers/) lists every built-in matcher. To name your own
@@ -200,7 +200,7 @@ problems at once, or to test your own assertions:
 ```rust
 use assertr::prelude::*;
 
-let failures = assert_that!(42).capture(|it| it.is_less_than(10).is_equal_to(43));
+let failures = assert_that!(42).capture( | it| it.is_less_than(10).is_equal_to(43));
 assert_that!(failures).has_length(2);
 assert_that!(failures[0].to_string()).contains("is not less than");
 ```
@@ -224,7 +224,7 @@ use assertr::prelude::*;
 
 "hello, world!".must().start_with("hello").end_with("!");
 
-let failures = 3.verify(|it| it.be_equal_to(4));
+let failures = 3.verify( | it| it.be_equal_to(4));
 assert_that!(failures).has_length(1);
 ```
 
@@ -235,7 +235,8 @@ all naming rules and for recording the source expression in reports.
 ## Finding assertions
 
 Autocomplete on a chain is the quickest way to discover assertions. To browse, start at the
-[assertion families](https://docs.rs/assertr/latest/assertr/assertions/). Each assertion trait lists its methods and what they
+[assertion families](https://docs.rs/assertr/latest/assertr/assertions/). Each assertion trait lists its methods and
+what they
 require from the subject.
 
 Many assertions apply to any type with the right capabilities. Your own types get `is_equal_to`
@@ -252,9 +253,11 @@ The crate documentation on docs.rs goes deeper:
   nested fields, enum variants, and collection policies such as `each` and `elements_are!`.
 - [Custom assertions](https://docs.rs/assertr/latest/assertr/#custom-assertions): reusable
   checks, your own chainable methods, and diagnostics in the standard report format.
-- [Rendering values](https://docs.rs/assertr/latest/assertr/renderer/): types without `Debug`, custom formatting, and limits for
+- [Rendering values](https://docs.rs/assertr/latest/assertr/renderer/): types without `Debug`, custom formatting, and
+  limits for
   large values.
-- [Failure handling](https://docs.rs/assertr/latest/assertr/failure/): inspect failures as data and customize panic messages.
+- [Failure handling](https://docs.rs/assertr/latest/assertr/failure/): inspect failures as data and customize panic
+  messages.
 - [Async code](https://docs.rs/assertr/latest/assertr/#async-code): async projections, futures
   that panic, and `Send` limitations.
 - [Type properties](https://docs.rs/assertr/latest/assertr/fn.assert_that_type.html): size, type
