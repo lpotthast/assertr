@@ -469,7 +469,7 @@ pub mod program {
 pub mod response {
     #[doc(inline)]
     pub use crate::assertions::reqwest::response::{
-        DoesNotHaveHeader, HasHeader, HasHeaderValue, HasStatusCode, HeaderRejection,
+        DoesNotHaveHeader, HasHeader, HasHeaderValue, HasStatusCode, HasVersion, HeaderRejection,
         IsClientError, IsInformational, IsRedirection, IsServerError, IsSuccess,
     };
 }

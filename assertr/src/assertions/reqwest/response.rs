@@ -1,7 +1,7 @@
 //! Assertions for `reqwest::Response`.
 //!
-//! Assertions cover status codes and headers. Projections expose one header, the text body, or a
-//! JSON body. Failures include the request URL.
+//! Assertions cover status codes, HTTP versions, and headers. Projections expose one header, the
+//! text body, or a JSON body. Failures include the request URL.
 //!
 //! Reading a body consumes the response. `text()` and `json()` are async and require
 //! `assert_that_owned!` or `.must_owned()`.
@@ -75,6 +75,61 @@ where
                 .actual(render.value(&status))
                 .expected(render.value(&self.0))
                 .fact(url_fact(render, actual)),
+        }
+    }
+}
+
+/// Compares the HTTP version of the observed response.
+#[derive(Debug, Clone, Copy)]
+pub struct HasVersion(reqwest::Version);
+
+impl HasVersion {
+    /// Expects this HTTP version.
+    #[must_use]
+    pub const fn new(expected: reqwest::Version) -> Self {
+        Self(expected)
+    }
+}
+
+impl<R> Expectation<reqwest::Response, R> for HasVersion
+where
+    R: ValueRenderer<reqwest::Version> + ValueRenderer<str>,
+{
+    type Success<'a> = ();
+    type Rejection<'a> = reqwest::Version;
+
+    fn evaluate<'a>(
+        &'a self,
+        actual: &'a reqwest::Response,
+        _context: &AssertionContext<'_, R>,
+    ) -> Result<Self::Success<'a>, Self::Rejection<'a>> {
+        let version = actual.version();
+        if version == self.0 {
+            Ok(())
+        } else {
+            Err(version)
+        }
+    }
+
+    const KIND: FailureKind = FailureKind::Equality;
+
+    fn explain<'a>(
+        &'a self,
+        rejected: Option<(&'a reqwest::Response, Self::Rejection<'a>)>,
+        failure: FailureBuilder,
+        context: &AssertionContext<'_, R>,
+    ) -> FailureBuilder {
+        let render = context.render();
+        let failure = failure
+            .relations(
+                rejected.map(|(_, version)| render.value(&version)),
+                "has the expected HTTP version",
+                "is not the expected HTTP version",
+            )
+            .expected(render.value(&self.0));
+        match rejected {
+            None => failure,
+            Some((actual, _)) => failure.fact(url_fact(render, actual)),
         }
     }
 }
@@ -418,6 +473,12 @@ pub trait ReqwestResponseAssertions<R = DebugRenderer> {
     where
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>;
 
+    /// Asserts that the response uses exactly this HTTP version, such as
+    /// [`reqwest::Version::HTTP_2`].
+    fn has_version(self, expected: reqwest::Version) -> Self
+    where
+        R: ValueRenderer<reqwest::Version> + ValueRenderer<str>;
+
     /// Asserts that the status code indicates success (`2xx`).
     fn is_success(self) -> Self
     where
@@ -484,6 +545,14 @@ impl<M: Mode, R> ReqwestResponseAssertions<R> for AssertThat<'_, reqwest::Respon
         R: ValueRenderer<reqwest::StatusCode> + ValueRenderer<str>,
     {
         self.matches(HasStatusCode::new(expected))
+    }
+
+    #[track_caller]
+    fn has_version(self, expected: reqwest::Version) -> Self
+    where
+        R: ValueRenderer<reqwest::Version> + ValueRenderer<str>,
+    {
+        self.matches(HasVersion::new(expected))
     }
 
     #[track_caller]
@@ -916,6 +985,7 @@ mod tests {
             ok_response()
                 .must()
                 .have_status_code(reqwest::StatusCode::OK)
+                .have_version(reqwest::Version::HTTP_11)
                 .be_success()
                 .have_header("content-type")
                 .not_have_header("x-api-key")
@@ -963,6 +1033,16 @@ mod tests {
             }
         }
 
+        impl ValueRenderer<reqwest::Version> for EvidenceRenderer {
+            fn fmt(
+                &self,
+                value: &reqwest::Version,
+                f: &mut core::fmt::Formatter<'_>,
+            ) -> core::fmt::Result {
+                core::fmt::Debug::fmt(value, f)
+            }
+        }
+
         impl ValueRenderer<reqwest::Error> for EvidenceRenderer {
             fn fmt(
                 &self,
@@ -1002,13 +1082,14 @@ mod tests {
                 .with_renderer(EvidenceRenderer)
                 .capture(|it| {
                     it.has_status_code(reqwest::StatusCode::OK)
+                        .has_version(reqwest::Version::HTTP_2)
                         .is_informational()
                         .is_success()
                         .is_redirection()
                         .is_client_error()
                         .is_server_error()
                 });
-            assert_that!(failures).has_length(4);
+            assert_that!(failures).has_length(5);
 
             drop(
                 assert_that_owned!(response(200, &[], "text"))
@@ -1068,6 +1149,29 @@ mod tests {
                 failures[0].expected.as_ref().unwrap(),
                 &reqwest::StatusCode::OK,
             );
+        }
+
+        #[test]
+        fn version_evidence_renders_and_redacts_through_the_active_renderer() {
+            let subject = response(200, &[], "");
+            let failures = assert_that!(subject)
+                .with_renderer(CustomValueRenderer)
+                .capture(|it| it.has_version(reqwest::Version::HTTP_2));
+            assert_custom_value(
+                failures[0].actual.as_ref().unwrap(),
+                &reqwest::Version::HTTP_11,
+            );
+            assert_custom_value(
+                failures[0].expected.as_ref().unwrap(),
+                &reqwest::Version::HTTP_2,
+            );
+            assert_custom_value(&failures[0].facts[0].value, subject.url().as_str());
+
+            let failures = assert_that!(subject)
+                .with_renderer(RedactingRenderer)
+                .with_location(false)
+                .capture(|it| it.has_version(reqwest::Version::HTTP_2));
+            assert_redacted(&failures[0], &["localhost/hello", "HTTP/"]);
         }
 
         #[test]
@@ -1225,6 +1329,64 @@ mod tests {
                 Expected: 200
 
                   Actual: 404
+
+                Details:
+                  - URL: "http://localhost/hello"
+                -------- assertr --------
+            "#});
+        }
+    }
+
+    mod has_version {
+        use indoc::formatdoc;
+        use reqwest::ResponseBuilderExt;
+
+        use super::ok_response;
+        use crate::prelude::*;
+
+        /// Builds a response that was received over this HTTP version.
+        fn response_over(version: reqwest::Version) -> reqwest::Response {
+            let response = http::Response::builder()
+                .version(version)
+                .url("http://localhost/hello".parse().expect("valid url"))
+                .body("")
+                .expect("valid response");
+            reqwest::Response::from(response)
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            assert_caller_location!(
+                assert_that!(ok_response()),
+                has_version(reqwest::Version::HTTP_2)
+            );
+        }
+
+        #[test]
+        fn succeeds_when_the_version_matches() {
+            assert_that!(ok_response()).has_version(reqwest::Version::HTTP_11);
+            assert_that!(response_over(reqwest::Version::HTTP_2))
+                .has_version(reqwest::Version::HTTP_2);
+        }
+
+        #[test]
+        fn panics_when_the_version_differs() {
+            assert_that!(|| {
+                assert_that!(response_over(reqwest::Version::HTTP_2))
+                    .with_location(false)
+                    .has_version(reqwest::Version::HTTP_11);
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `response_over(reqwest::Version::HTTP_2)`
+
+                Actual: HTTP/2.0
+
+                is not the expected HTTP version
+
+                Expected: HTTP/1.1
 
                 Details:
                   - URL: "http://localhost/hello"

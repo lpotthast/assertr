@@ -455,6 +455,9 @@ impl<C: StdCommand, M: Mode, R> CommandAssertions<R> for AssertThat<'_, C, M, R>
 /// propagate to the original chain. Projecting does not count as an assertion and works in every
 /// mode.
 ///
+/// Checks such as [`CommandAssertions::has_arg`] consume the chain and return it, so bind
+/// the chain they return to project from it afterwards:
+///
 /// ```
 /// use std::{ffi::OsStr, path::Path, process::Command};
 ///
@@ -466,7 +469,7 @@ impl<C: StdCommand, M: Mode, R> CommandAssertions<R> for AssertThat<'_, C, M, R>
 ///     .env("LANG", "C")
 ///     .env_remove("DISPLAY")
 ///     .current_dir("/tmp");
-/// let it = assert_that!(command);
+/// let it = assert_that!(command).has_arg("kvm").does_not_have_arg("-snapshot");
 /// it.program().is_equal_to("qemu");
 /// it.args().contains_contiguous(["-accel", "kvm"]);
 /// it.envs()

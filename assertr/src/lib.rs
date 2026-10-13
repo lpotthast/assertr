@@ -52,7 +52,7 @@
 //!
 //! ```toml
 //! [dev-dependencies]
-//! assertr = "0.9.0"
+//! assertr = "0.9.1"
 //! ```
 //!
 //! Everything beyond `std` and `num` is opt-in:

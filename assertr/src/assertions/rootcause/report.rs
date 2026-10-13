@@ -1,4 +1,4 @@
-use alloc::{format, string::String};
+use alloc::{format, string::String, vec::Vec};
 use core::{
     any::{TypeId, type_name},
     fmt::Display,
@@ -288,6 +288,38 @@ pub trait RootcauseTypedReportAssertions<'t, C, M: Mode, R = DebugRenderer> {
     ///
     /// Failures of the returned chain propagate to this chain, like [`AssertThat::derive`].
     fn current_context(&'t self) -> AssertThat<'t, C, M, R>
+    where
+        R: Clone;
+}
+
+/// Projections of a report or report reference onto its rootcause-formatted parts.
+///
+/// Each method borrows the assertion chain and returns a chain over the selected part, so the
+/// general assertion families apply to it. Failures propagate to the original chain. Projecting
+/// does not count as an assertion and works in every mode.
+///
+/// ```
+/// use assertr::{matchers::string, prelude::*};
+/// use rootcause::prelude::*;
+///
+/// let report = report!("request failed")
+///     .attach("path: /api/users")
+///     .attach("retries: 3");
+/// assert_that!(report)
+///     .attachment_display_values()
+///     .contains("retries: 3")
+///     .contains_matching(string::contains("/api/users"));
+/// ```
+#[cfg_attr(feature = "fluent", assertr_macros::fluent_aliases)]
+pub trait RootcauseReportProjectionAssertions<'t, M: Mode, R = DebugRenderer> {
+    /// Returns an assertion over the `Display` values of the report's direct attachments, in
+    /// attachment order.
+    ///
+    /// Each value is formatted with rootcause's `format_inner()`, honoring rootcause formatter
+    /// hooks without requiring the concrete attachment types. Attachments added by rootcause's
+    /// creation hooks, such as the source location, are included. Attachments of child reports
+    /// are not.
+    fn attachment_display_values(&'t self) -> AssertThat<'t, Vec<String>, M, R>
     where
         R: Clone;
 }
@@ -731,6 +763,23 @@ macro_rules! report_impls {
             }
         }
 
+        impl<'t, $($lt,)? C: ?Sized, O, T, M: Mode, R> RootcauseReportProjectionAssertions<'t, M, R>
+            for AssertThat<'t, rootcause::$report<$($lt,)? C, O, T>, M, R>
+        {
+            fn attachment_display_values(&'t self) -> AssertThat<'t, Vec<String>, M, R>
+            where
+                R: Clone,
+            {
+                self.derive_owned_as("attachment_display_values()", |report| {
+                    report
+                        .attachments()
+                        .iter()
+                        .map(|attachment| format!("{}", attachment.format_inner()))
+                        .collect()
+                })
+            }
+        }
+
         impl<'t, $($lt,)? O, T, R> RootcauseDynamicReportExtractAssertions<'t, R>
             for AssertThat<'t, rootcause::$report<$($lt,)? Dynamic, O, T>, Panic, R>
         {
@@ -889,6 +938,14 @@ mod tests {
             assert_trait_impl!(
                 AssertThat<'static, Report<TestError>, Capture, NoRenderer>
                     => RootcauseTypedReportAssertions<'static, TestError, Capture, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, Report<Dynamic>, Capture, NoRenderer>
+                    => RootcauseReportProjectionAssertions<'static, Capture, NoRenderer>
+            );
+            assert_trait_impl!(
+                AssertThat<'static, rootcause::ReportRef<'static, TestError>, Panic, NoRenderer>
+                    => RootcauseReportProjectionAssertions<'static, Panic, NoRenderer>
             );
             assert_trait_impl!(
                 AssertThat<'static, rootcause::ReportRef<'static, TestError>, Panic, NoRenderer>
@@ -1427,6 +1484,89 @@ mod tests {
 
                     Constraint:
                         is other
+                -------- assertr --------
+            "#});
+        }
+    }
+
+    mod attachment_display_values {
+        use indoc::formatdoc;
+        use rootcause::{
+            handlers, prelude::*, report_attachments::ReportAttachments,
+            report_collection::ReportCollection,
+        };
+
+        use super::TestError;
+        use crate::{matchers::string, prelude::*};
+
+        /// A report with exactly the given attachments, without the attachments of creation hooks.
+        fn report_with(attachments: &[&'static str]) -> Report<TestError> {
+            let mut report: Report<TestError> = Report::from_parts_unhooked::<handlers::Display>(
+                TestError("root"),
+                ReportCollection::new(),
+                ReportAttachments::new(),
+            );
+            for attachment in attachments {
+                report = report.attach(*attachment);
+            }
+            report
+        }
+
+        #[test]
+        fn caller_location_is_as_expected() {
+            let report = report_with(&["metadata"]);
+            assert_caller_location!(assert_that!(report).attachment_display_values(), is_empty());
+        }
+
+        #[test]
+        fn continues_with_the_direct_attachments_in_order() {
+            let mut report = report_with(&["path: /tmp", "retries: 3"]);
+            report.children_mut().push(
+                report!(TestError("child"))
+                    .attach("hidden")
+                    .into_dynamic()
+                    .into_cloneable(),
+            );
+
+            assert_that!(report)
+                .attachment_display_values()
+                .contains_exactly(["path: /tmp", "retries: 3"]);
+            assert_that!(report.as_ref())
+                .attachment_display_values()
+                .contains_matching(string::contains("/tmp"));
+        }
+
+        #[test]
+        fn includes_attachments_of_creation_hooks() {
+            assert_that!(report!(TestError("root")).attach("metadata"))
+                .attachment_display_values()
+                .has_length(2)
+                .contains("metadata")
+                .contains_matching(string::contains("report.rs"));
+        }
+
+        #[test]
+        fn panics_with_the_projection_and_the_formatted_attachments() {
+            assert_that!(|| {
+                assert_that!(report_with(&["path: /tmp"]))
+                    .with_location(false)
+                    .attachment_display_values()
+                    .contains("retries: 3");
+            })
+            .panics()
+            .message()
+            .is_equal_to(formatdoc! {r#"
+                -------- assertr --------
+                Expression: `report_with(&["path: /tmp"])`
+                Projection: `.attachment_display_values()`
+
+                Actual: [
+                    "path: /tmp",
+                ]
+
+                does not contain
+
+                Expected: "retries: 3"
                 -------- assertr --------
             "#});
         }

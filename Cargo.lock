@@ -22,7 +22,7 @@ dependencies = [
 
 [[package]]
 name = "assertr"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "assertr-macros",
  "async-trait",

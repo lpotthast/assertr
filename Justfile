@@ -24,11 +24,11 @@ msrv:
 
 # Check whether current changes require a breaking release.
 semver-checks:
-    cargo semver-checks -p assertr --baseline-version 0.7.1 --all-features
+    cargo semver-checks -p assertr --baseline-version 0.9.0 --all-features
 
 # Enumerate intentional breaks even when the planned version permits them. Review the nonzero result.
 semver-audit:
-    cargo semver-checks -p assertr --baseline-version 0.7.1 --all-features --release-type patch
+    cargo semver-checks -p assertr --baseline-version 0.9.0 --all-features --release-type patch
 
 # Check the code.
 check:

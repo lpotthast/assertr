@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/),
 and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [0.9.1] - 2026-10-13
+
+### Added
+
+- `attachment_display_values()` continues with the `Display` values of a rootcause report's direct attachments, in
+  order, formatted through rootcause's formatter hooks. Collection assertions then check attachment contents, as in
+  `assert_that!(report).attachment_display_values().contains_matching(string::contains("/api/users"))`. It works on
+  reports and report references in every mode, through the new `RootcauseReportProjectionAssertions` trait in
+  `assertions` and the prelude.
+- `has_version(expected)` asserts the HTTP version of a `reqwest::Response`. `matchers::response::HasVersion` is the
+  matcher form.
+
 ## [0.9.0] - 2026-10-13
 
 ### Added
@@ -926,7 +938,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - `AssertrPartialEq` trait for field-by-field difference reporting.
 - Assertion tracking (panics if `AssertThat` is dropped with zero assertions).
 
-[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.8.0...HEAD
+[Unreleased]: https://github.com/lpotthast/assertr/compare/v0.9.1...HEAD
+
+[0.9.1]: https://github.com/lpotthast/assertr/compare/v0.9.0...v0.9.1
+
+[0.9.0]: https://github.com/lpotthast/assertr/compare/v0.8.0...v0.9.0
 
 [0.8.0]: https://github.com/lpotthast/assertr/compare/v0.7.1...v0.8.0
 
