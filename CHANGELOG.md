@@ -39,6 +39,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
   extractions `pointer("/a/0")`, `str()`, `i64()`, `u64()`, `f64()`, `bool()`, `array()`, and `object()`, which continue
   with the selected content. JSON objects implement `Map` and `MapLookup`, so map assertions apply to them. The
   `matchers::json` namespace holds the expectations.
+- String literals compare with `OsStr`, `OsString`, and `&OsStr` subjects and elements, so
+  `assert_that!(command).program().is_equal_to("cargo")` and `.args().contains_exactly(["build", "--locked"])` work.
+  With `serde-json`, JSON values compare with strings, numbers, and booleans, as in
+  `assert_that!(value).pointer("/name").is_equal_to("Ada")` or `.contains_entry("retries", 3)` on a JSON object. This
+  needs `borrow-for` 0.1.3. With `serde-json`, a number or boolean expected value can also be compared with a JSON value,
+  so it no longer infers an otherwise unconstrained subject type on its own: annotate such a subject, as in
+  `Err::<u32, _>(..)`.
 - `has_count_matching(count, matcher)` asserts how many elements of a collection or an iterator match a matcher. A
   failure reports the matching elements.
 

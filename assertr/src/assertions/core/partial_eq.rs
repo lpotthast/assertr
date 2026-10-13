@@ -693,6 +693,34 @@ mod tests {
             Point { x: 1, y: 2 }
         }
 
+        #[cfg(feature = "std")]
+        #[test]
+        fn os_strings_compare_with_string_literals() {
+            use std::ffi::{OsStr, OsString};
+
+            assert_that!(OsStr::new("cargo")).is_equal_to("cargo");
+            assert_that!(OsString::from("cargo"))
+                .is_equal_to("cargo")
+                .is_not_equal_to("rustc");
+            assert_that!([OsStr::new("build"), OsStr::new("--locked")])
+                .contains_exactly(["build", "--locked"]);
+        }
+
+        #[cfg(feature = "serde-json")]
+        #[test]
+        fn json_values_compare_with_strings_numbers_and_booleans() {
+            use serde_json::json;
+
+            assert_that!(json!("Ada"))
+                .is_equal_to("Ada")
+                .is_equal_to(String::from("Ada"))
+                .is_not_equal_to(1);
+            assert_that!(json!(36)).is_equal_to(36).is_equal_to(36_u64);
+            assert_that!(json!(true)).is_equal_to(true);
+            assert_that!(vec![json!("reader"), json!("editor")])
+                .contains_exactly(["reader", "editor"]);
+        }
+
         #[test]
         #[allow(clippy::needless_borrows_for_generic_args)] // Borrowed temporaries are the contract under test.
         fn accepts_all_value_reference_forms_and_reusable_matchers() {

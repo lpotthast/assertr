@@ -467,8 +467,8 @@ impl<C: StdCommand, M: Mode, R> CommandAssertions<R> for AssertThat<'_, C, M, R>
 ///     .env_remove("DISPLAY")
 ///     .current_dir("/tmp");
 /// let it = assert_that!(command);
-/// it.args()
-///     .contains_contiguous([OsStr::new("-accel"), OsStr::new("kvm")]);
+/// it.program().is_equal_to("qemu");
+/// it.args().contains_contiguous(["-accel", "kvm"]);
 /// it.envs()
 ///     .contains_entry(OsStr::new("LANG"), Some(OsStr::new("C")))
 ///     .contains_entry(OsStr::new("DISPLAY"), None);
@@ -842,7 +842,8 @@ mod tests {
         fn continues_with_the_program() {
             assert_that!(cargo_build())
                 .program()
-                .is_equal_to(OsStr::new("cargo"));
+                .is_equal_to(OsStr::new("cargo"))
+                .is_equal_to("cargo");
         }
     }
 
@@ -861,7 +862,8 @@ mod tests {
         fn continues_with_the_arguments_in_order() {
             assert_that!(cargo_build())
                 .args()
-                .contains_exactly([OsStr::new("build"), OsStr::new("--locked")]);
+                .contains_exactly([OsStr::new("build"), OsStr::new("--locked")])
+                .contains_exactly(["build", "--locked"]);
         }
     }
 

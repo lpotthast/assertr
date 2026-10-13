@@ -244,9 +244,10 @@ impl<M: Mode, R> JsonValueAssertions<R> for AssertThat<'_, Value, M, R> {
 ///
 /// Each method checks that the value has the requested shape, then continues with its content,
 /// so the general assertion families apply: string assertions to a string, collection
-/// assertions to an array, and map assertions to an object. A failed extraction cannot produce a
-/// value, so the family is unavailable in capture mode. Use [`JsonValueAssertions`] or the
-/// [`json` matchers](crate::matchers::json) there.
+/// assertions to an array, and map assertions to an object. A JSON value itself compares with
+/// strings, numbers, and booleans, so `pointer("/name").is_equal_to("Ada")` needs no extraction. A
+/// failed extraction cannot produce a value, so the family is unavailable in capture mode. Use
+/// [`JsonValueAssertions`] or the [`json` matchers](crate::matchers::json) there.
 ///
 /// ```
 /// use assertr::prelude::*;
@@ -257,7 +258,8 @@ impl<M: Mode, R> JsonValueAssertions<R> for AssertThat<'_, Value, M, R> {
 ///     "healthy": true,
 /// });
 /// let it = assert_that!(response);
-/// it.pointer("/sections/0/category").str().is_equal_to("qemu_toolchain");
+/// it.pointer("/sections/0/category").is_equal_to("qemu_toolchain");
+/// it.pointer("/sections/0/category").str().starts_with("qemu");
 /// it.pointer("/sections/0/checks").u64().is_equal_to(3);
 /// it.pointer("/sections").array().has_length(1);
 /// it.pointer("/healthy").bool().is_true();
@@ -617,7 +619,9 @@ mod tests {
             it.pointer("/admin").bool().is_true();
             it.pointer("/roles")
                 .array()
-                .contains_exactly([serde_json::json!("reader"), serde_json::json!("editor")]);
+                .contains_exactly(["reader", "editor"]);
+            it.pointer("/name").is_equal_to("Ada");
+            it.pointer("/age").is_equal_to(36);
             it.pointer("/address")
                 .object()
                 .contains_key("city")
@@ -662,6 +666,8 @@ mod tests {
                 .has_length(2)
                 .contains_key("retries")
                 .contains_entry("timeout", json!(30))
+                .contains_entry("timeout", 30)
+                .contains_exactly_entries([("retries", 3), ("timeout", 30)])
                 .does_not_contain_key("verbose");
         }
     }

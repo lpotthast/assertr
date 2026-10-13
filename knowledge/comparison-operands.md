@@ -35,7 +35,12 @@ The `borrow-for` crate defines the standard selections and lets custom wrappers 
 `assertr::borrow_for`. Public bounds name `ExpectedOperand<A>` instead of `BorrowFor<A>`. Its only implementation is a
 blanket one over every `BorrowFor<A>` operand, marked `#[diagnostic::do_not_recommend]`, so a rejected operand reports
 assertr's explanation and alternatives instead of a list of unrelated `BorrowFor` implementations. Custom operands still
-implement `BorrowFor`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
+implement `BorrowFor`.
+
+`borrow-for` also selects `str` views for string literals in `OsStr`, `OsString`, and `&OsStr` contexts, and with assertr's
+`serde-json` feature, scalar views in `serde_json::Value` contexts. Every additional context for an operand type weakens
+inference: an expected `1_u32` cannot determine an otherwise unconstrained subject type once it is comparable with both
+`u32` and `Value`. The [borrowed equality guide](../assertr/src/crate_docs.md#borrowed-expected-values) covers supported views
 and wrapper implementations.
 
 | Check                                                          | Required comparison                                                                                   |
